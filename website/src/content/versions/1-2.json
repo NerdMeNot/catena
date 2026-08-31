@@ -1,0 +1,54 @@
+{
+  "sidebar": [
+    {
+      "label": "Guides",
+      "items": [
+        {
+          "autogenerate": {
+            "directory": "guides"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Operators",
+      "items": [
+        {
+          "autogenerate": {
+            "directory": "operators"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Recipes",
+      "items": [
+        {
+          "autogenerate": {
+            "directory": "examples"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Reference",
+      "items": [
+        {
+          "slug": "reference/versioning"
+        },
+        {
+          "slug": "reference/changelog"
+        },
+        {
+          "label": "API on pkg.go.dev",
+          "link": "https://pkg.go.dev/github.com/NerdMeNot/catena@v1.2.0",
+          "attrs": {
+            "target": "_blank",
+            "rel": "noopener noreferrer"
+          }
+        }
+      ]
+    }
+  ],
+  "excluded": []
+}

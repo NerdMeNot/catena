@@ -88,9 +88,13 @@ generated content says.
 ### Versioning the website
 
 The site serves the current release at the root and every archived release
-under its own prefix, with a switcher in the header. `v1.1.0` is archived
-at `/1-1/`, and its pages carry a notice saying so and linking to the
-current one.
+under its own prefix, with a switcher in the header. `v1.2.0` is archived
+at `/1-2/` and `v1.1.0` at `/1-1/`; their pages carry a notice saying so
+and linking to the current one.
+
+Archive every release, including one that changed no library code. A
+switcher that skips a version reads as a fault rather than as a judgement
+about how much changed, and the reader cannot see the reasoning.
 
 To archive a release when you cut the next one:
 

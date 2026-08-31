@@ -52,7 +52,10 @@ export default defineConfig({
           current: { label: `v${site.version}` },
           // Archived releases, newest first. Each needs its snapshot
           // committed under src/content/docs/<slug>/.
-          versions: [{ slug: '1-1', label: 'v1.1.0' }],
+          versions: [
+            { slug: '1-2', label: 'v1.2.0' },
+            { slug: '1-1', label: 'v1.1.0' },
+          ],
         }),
       ],
       components: {
