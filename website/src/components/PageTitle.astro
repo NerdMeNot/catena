@@ -1,0 +1,27 @@
+---
+// Starlight's default page title, with the display face and a rule under
+// it. Overridden mainly so headings on doc pages match the landing page
+// rather than reading as a different site. The route (and so the title)
+// comes from `Astro.locals.starlightRoute`, which is how Starlight passes
+// page data to overrides. The heading id is Starlight's own constant
+// value, inlined because the constants module is not a public export —
+// anchors and skip links point at it.
+const { entry } = Astro.locals.starlightRoute
+---
+
+<h1 id="_top">{entry.data.title}</h1>
+
+<style>
+  h1 {
+    margin-top: 1rem;
+    font-family: var(--catena-display);
+    font-weight: 600;
+    font-size: var(--sl-text-h1);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-variation-settings: 'opsz' 96;
+    color: var(--sl-color-white);
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--catena-rule);
+  }
+</style>

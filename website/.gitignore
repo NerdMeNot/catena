@@ -1,0 +1,12 @@
+# Astro build output and caches.
+dist/
+.astro/
+.wrangler/
+
+# Dependencies. bun.lock IS committed — a deploy must resolve exactly what
+# was reviewed.
+node_modules/
+
+# Environment.
+.env
+.env.production

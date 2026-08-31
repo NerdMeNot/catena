@@ -1,0 +1,30 @@
+# Build and test output. The library itself produces no binaries; anything
+# here came from `go build -o`, benchmarks, or profiling sessions.
+/bin/
+/dist/
+*.test
+*.out
+*.prof
+*.pprof
+coverage.html
+
+# Editors and IDEs.
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating systems.
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+
+# Go workspace files are local development configuration.
+go.work
+go.work.sum
+
+# proto toolchain install logs.
+proto-*.log

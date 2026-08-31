@@ -1,0 +1,102 @@
+# Verifies a version tag and publishes the GitHub release for it.
+#
+# Nothing is built: a Go module resolves from the git tag, so the tag *is*
+# the release for anybody writing `go get`. This workflow's job is to refuse
+# to publish a tag that should not exist — one that disagrees with the
+# Version constant, or whose commit does not pass the full gate — and to
+# attach the changelog section to the one that should.
+#
+# workflow_dispatch exists so a failed publish can be retried against an
+# existing tag without moving it, which is the only safe way to recover.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release, with the v (e.g. v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.0"
+
+      # A release whose code reports a different version than the tag that
+      # produced it is worse than no release. Nothing proceeds until the
+      # two agree.
+      - name: Tag matches Version
+        id: check
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          want="${TAG#v}"
+          have=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' version.go)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [ "$want" != "$have" ]; then
+            echo "tag $TAG disagrees with Version $have in version.go"
+            exit 1
+          fi
+
+      - name: Full gate on the tagged commit
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet ./...
+          go generate ./...
+          git diff --exit-code list_gen.go Assets website/public docs/operators
+          go test -race ./...
+          go test -coverprofile=coverage.out -coverpkg=github.com/NerdMeNot/catena ./...
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
+          test "$total" = "100.0%" || { echo "coverage regression: $total"; exit 1; }
+
+  publish:
+    name: Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+
+      # The release notes are the tag's CHANGELOG section, verbatim — one
+      # source of truth for what a version contains.
+      - name: Extract changelog section
+        run: |
+          TAG="${{ needs.verify.outputs.tag }}"
+          version="${TAG#v}"
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { on=1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if ! [ -s notes.md ]; then
+            echo "CHANGELOG.md has no section for $version" >&2
+            exit 1
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ needs.verify.outputs.tag }}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "catena $TAG" --notes-file notes.md
+          fi

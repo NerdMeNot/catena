@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.0"
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: vet
+        run: go vet ./...
+
+      - name: generated code is current
+        run: |
+          go generate ./...
+          git diff --exit-code list_gen.go Assets website/public docs/operators
+
+      - name: tests (race)
+        run: go test -race ./...
+
+      # The gate covers the library — what people import. The generators
+      # under internal/gen are build tooling: they have their own tests
+      # (run above by `go test ./...`) but are not held to 100%, because
+      # their remaining uncovered lines are error paths unreachable with
+      # the shipped constants, and contriving tests for those would make
+      # the number meaningless.
+      - name: library coverage is 100%
+        run: |
+          go test -coverprofile=coverage.out -coverpkg=github.com/NerdMeNot/catena ./...
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
+          echo "total coverage: $total"
+          test "$total" = "100.0%" || { echo "coverage regression: $total"; exit 1; }
+
+      - name: examples run
+        run: |
+          for d in examples/*/; do
+            go run "./$d" > /dev/null
+          done
+
+      - name: benchmarks compile and run briefly
+        run: go test -bench . -benchtime=10x -run '^$' ./...
+
+  # The website's pages are generated from docs/, examples/ and the
+  # changelog, and the generated files are committed so that a deploy
+  # publishes exactly what was reviewed. That only holds if they are
+  # never stale, which is what this checks.
+  website:
+    name: Website content is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - run: bun install --frozen-lockfile
+        working-directory: website
+
+      - name: Regenerating changes nothing
+        working-directory: website
+        run: |
+          bun run sync
+          git diff --exit-code src/content/docs src/data || {
+            echo "::error::website content is stale — run 'bun run sync' in website/ and commit."
+            exit 1
+          }
+
+      - name: Site builds
+        working-directory: website
+        run: bun run astro build

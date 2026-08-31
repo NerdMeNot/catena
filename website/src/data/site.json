@@ -1,0 +1,9 @@
+{
+  "version": "1.1.0",
+  "repoUrl": "https://github.com/NerdMeNot/catena",
+  "siteUrl": "https://catena-docs.pages.dev",
+  "module": "github.com/NerdMeNot/catena",
+  "guides": 6,
+  "operators": 14,
+  "examples": 8
+}

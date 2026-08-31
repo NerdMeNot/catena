@@ -1,0 +1,130 @@
+# Builds and deploys the documentation site (website/ -> the catena-docs
+# Cloudflare Pages project, https://catena-docs.pages.dev).
+#
+# ## Why this job does not run `bun run build`
+#
+# That script is `bun run sync && astro build`, and `sync` derives the
+# guides, examples and version from the repository. Running it here would
+# mean the deployed site could differ from what was reviewed in the pull
+# request — the generated pages would be produced fresh, unseen.
+#
+# So the generated content is committed, CI fails when it is stale (see
+# "Website content is current" in ci.yml), and this job builds exactly
+# those reviewed files.
+#
+# ## Secrets
+#
+# CLOUDFLARE_API_TOKEN   — scoped to Cloudflare Pages: Edit on this account.
+# CLOUDFLARE_ACCOUNT_ID  — the account the catena-docs project lives in.
+#
+# Neither is available to a fork's pull request, which is why deploy is
+# guarded on push and dispatch rather than on pull_request.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'docs/**'
+      - 'examples/**'
+      - 'CHANGELOG.md'
+      - 'version.go'
+      - '.github/workflows/docs.yml'
+  # The site states which release it documents, and that comes from the
+  # changelog — so publishing a release must republish the site even when
+  # nothing under website/ changed.
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    # Surfaced as env so the deploy step can test for them. Secrets cannot
+    # be read in a job-level `if`, and a repository without them
+    # configured should skip the deploy rather than fail the workflow —
+    # the build and its checks above are the part worth running always.
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - run: bun install --frozen-lockfile
+
+      # `astro build` alone, deliberately — see the note at the top.
+      - run: bun run astro build
+
+      # A build that emits nothing still deploys successfully and replaces
+      # a working site with an empty one, so the output is checked before
+      # it is published rather than after somebody notices.
+      - name: Output is not empty
+        run: |
+          test -f dist/index.html || {
+            echo "::error::dist/index.html is missing — the build produced no site."
+            exit 1
+          }
+          pages=$(find dist -name '*.html' | wc -l)
+          echo "built $pages pages"
+          [ "$pages" -ge 15 ] || {
+            echo "::error::only $pages pages built, expected the full docs tree."
+            exit 1
+          }
+
+      # The version in the header is the site's main factual claim. If it
+      # does not match the newest changelog entry, the deploy would tell
+      # readers to use a version that is not the current release.
+      - name: Site version matches the newest release
+        run: |
+          want=$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' ../CHANGELOG.md | tr -d '## []')
+          have=$(python3 -c "import json;print(json.load(open('src/data/site.json'))['version'])")
+          echo "changelog: $want, site: $have"
+          [ "$want" = "$have" ] || {
+            echo "::error::site.json says v$have but the newest release is v$want — run 'bun run sync'."
+            exit 1
+          }
+
+      # Created on first deploy rather than by hand in the dashboard, so a
+      # fresh clone needs only the two secrets to publish. Idempotent: the
+      # project is created only when the account does not already have it.
+      - name: Ensure the Pages project exists
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          if bunx wrangler pages project list 2>/dev/null | grep -q 'catena-docs'; then
+            echo "project catena-docs already exists"
+          else
+            echo "creating Pages project catena-docs"
+            bunx wrangler pages project create catena-docs --production-branch=main
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: website
+          command: pages deploy dist --project-name=catena-docs
+
+      - name: Deploy skipped
+        if: env.CLOUDFLARE_API_TOKEN == ''
+        run: |
+          echo "::notice::Site built and checked, but not deployed:" \
+               "CLOUDFLARE_API_TOKEN is not configured for this repository." \
+               "Create the catena-docs Pages project and add the secret to enable it."

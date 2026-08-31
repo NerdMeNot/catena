@@ -1,0 +1,387 @@
+---
+// The landing page. A plain Astro route with its own layout: a docs
+// framework's default hero is the fastest way to look like every other
+// project, and the one thing worth leading with here is the code.
+import ThemeToggle from '../components/ThemeToggle.astro'
+import site from '../data/site.json'
+
+const title = 'catena — lazy sequence pipelines for Go'
+const description =
+  'Lazy, fully typed sequence pipelines for Go 1.27+. Kotlin and LINQ ergonomics on ' +
+  'iter.Seq, with every operator’s memory and termination behaviour specified and tested.'
+
+const commitments = [
+  {
+    head: 'Nothing is hidden',
+    body: `No reflect, no <code>any</code> in value position, no hidden goroutines, no hidden
+           buffering. An operator that buffers says so in its doc comment, with its bound; a
+           terminal that would hang on an infinite sequence is marked; every panic happens at
+           construction, at the line that made the mistake.`,
+  },
+  {
+    head: 'Contracts tested, not promised',
+    body: `Every exported operator is registered in a conformance harness that consumes it
+           twice, runs it over infinite sources, breaks early and checks the producer’s cleanup
+           ran, and compares it against a hand-written loop. A completeness check fails CI for
+           any operator nothing registers. Statement coverage is 100%, enforced.`,
+  },
+  {
+    head: 'Slow only where Go is slow',
+    body: `Benchmarked against the same pipelines hand-built from raw <code>iter.Seq</code>
+           closures, catena meets or beats the raw mechanism on every path — the library adds
+           nothing. What remains against a plain loop is the iterator protocol itself, and it
+           is published rather than waved at.`,
+  },
+]
+
+const wins = [
+  ['FoldBy', 'GroupBy + fold per bucket', '2.97 MB → 1.2 KB'],
+  ['TopNBy(10)', 'SortedDesc().Take(10)', '4.1 MB → 1 KB, 32× faster'],
+  ['DedupeBy', 'DistinctBy on sorted input', 'unbounded → O(1)'],
+]
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Applied before first paint and before the stylesheet resolves, so a
+         reader who chose light does not watch the dark ground flash first.
+         Reads the same key the docs pages use, so the choice carries across. -->
+    <script is:inline>
+      try {
+        const v = localStorage.getItem('starlight-theme')
+        document.documentElement.dataset.theme =
+          v === 'light' || v === 'dark'
+            ? v
+            : matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+      } catch {
+        document.documentElement.dataset.theme = 'dark'
+      }
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="go-import" content={`${site.module} git ${site.repoUrl}`} />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="/icon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)" />
+    <link rel="canonical" href={`${site.siteUrl}/`} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+  </head>
+
+  <body>
+    <header>
+      <a class="lockup" href="/">
+        <img class="mark on-light" src="/icon.svg" alt="" width="28" height="28" />
+        <img class="mark on-dark" src="/icon-dark.svg" alt="" width="28" height="28" />
+        <span>catena</span>
+      </a>
+      <nav>
+        <a href="/guides/getting-started/">Docs</a>
+        <a href="/examples/basics/">Examples</a>
+        <a href={`https://pkg.go.dev/${site.module}`}>API</a>
+        <a href={site.repoUrl}>GitHub</a>
+        <ThemeToggle />
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Go {'≥'} 1.27 · v{site.version} · Apache-2.0</p>
+        <h1>Pipelines that say what they cost.</h1>
+        <p class="lede">
+          Kotlin and LINQ ergonomics on top of <code>iter.Seq</code>, built on Go 1.27
+          generic methods. Every operator declares its memory class, its termination
+          behaviour, and what it does with errors — and a conformance suite proves each one.
+        </p>
+
+        <pre><code><span class="k">top</span> := catena.FromSlice(orders).
+    Filter(<span class="k">func</span>(o Order) <span class="k">bool</span> {'{'} <span class="k">return</span> o.Paid {'}'}).
+    TopNBy(<span class="n">10</span>, <span class="k">func</span>(o Order) <span class="k">int</span> {'{'} <span class="k">return</span> o.Amount {'}'})
+
+<span class="k">byUser</span> := catena.FromSlice(orders).FoldBy(
+    <span class="k">func</span>(o Order) UserID {'{'} <span class="k">return</span> o.User {'}'},
+    <span class="k">func</span>(UserID) <span class="k">int</span> {'{'} <span class="k">return</span> <span class="n">0</span> {'}'},
+    <span class="k">func</span>(sum <span class="k">int</span>, o Order) <span class="k">int</span> {'{'} <span class="k">return</span> sum + o.Amount {'}'},
+)</code></pre>
+
+        <div class="install">
+          <code>go get {site.module}</code>
+        </div>
+
+        <div class="cta">
+          <a class="primary" href="/guides/getting-started/">Get started</a>
+          <a class="secondary" href="/guides/concepts/">How it works</a>
+        </div>
+      </section>
+
+      <section class="commitments">
+        {
+          commitments.map((c) => (
+            <article>
+              <h2>{c.head}</h2>
+              <p set:html={c.body} />
+            </article>
+          ))
+        }
+      </section>
+
+      <section class="wins">
+        <h2>The operators worth switching for</h2>
+        <p class="sub">
+          Not syntax sugar — these change the memory class of the computation.
+        </p>
+        <table>
+          <thead>
+            <tr><th>Use</th><th>Instead of</th><th>And it costs</th></tr>
+          </thead>
+          <tbody>
+            {
+              wins.map(([a, b, c]) => (
+                <tr>
+                  <td><code>{a}</code></td>
+                  <td><code>{b}</code></td>
+                  <td class="num">{c}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+        <p class="sub">
+          <a href="/guides/performance/">The full benchmarks</a>, including what a pipeline
+          costs against a hand-written loop and why.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        catena v{site.version} · Apache-2.0 ·
+        <a href={site.repoUrl}>source</a> ·
+        <a href="/reference/changelog/">changelog</a> ·
+        <a href="/reference/versioning/">versioning</a>
+      </p>
+    </footer>
+
+    <style is:global>
+      /* Light is the base; dark overrides the tokens below it. Every
+         colour on the page comes from one of these, so neither theme can
+         end up with one mode's text on the other's ground. */
+      :root {
+        --sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+        --display: 'Fraunces', ui-serif, Georgia, serif;
+        --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+        --ground: #faf9f7;
+        --ink: #12161c;
+        --body: #3c4753;
+        --muted: #667485;
+        --rule: #e2e5ea;
+        --ember: #d9642b;
+        --ember-lift: #b4501f;
+        --on-ember: #fff;
+
+        --catena-rule: var(--rule);
+        --catena-faint: var(--muted);
+        --catena-toggle-accent: #b4501f;
+
+        /* The code block reads as a terminal in BOTH themes, so it carries
+           its own ground and foreground. Inheriting the page's text colour
+           here put near-black type on a near-black block in light mode. */
+        --code-ground: #0d1117;
+        --code-ink: #c9d1d9;
+        --code-key: #ff9d6b;
+        --code-num: #9dd0ff;
+      }
+
+      :root[data-theme='dark'] {
+        --ground: #12161c;
+        --ink: #f2f4f7;
+        --body: #c0c8d2;
+        --muted: #8b96a4;
+        --rule: #2a323d;
+        --ember: #d9642b;
+        --ember-lift: #e07b45;
+        --on-ember: #fff;
+
+        --catena-toggle-accent: #d9642b;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font-family: var(--sans);
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a { color: var(--ember-lift); }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--rule);
+        max-width: 68rem;
+        margin: 0 auto;
+      }
+
+      :root[data-theme='dark'] .on-light,
+      :root:not([data-theme='dark']) .on-dark { display: none; }
+
+      .lockup {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--ink);
+        text-decoration: none;
+        font-family: var(--display);
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      nav { display: flex; align-items: center; gap: 1.25rem; font-size: 0.92rem; }
+      nav a { color: var(--muted); text-decoration: none; }
+      nav a:hover { color: var(--ink); }
+
+      main { max-width: 68rem; margin: 0 auto; padding: 0 1.5rem 4rem; }
+
+      .hero { padding: 4rem 0 3rem; }
+
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin: 0 0 1rem;
+        letter-spacing: 0.02em;
+      }
+
+      h1 {
+        font-family: var(--display);
+        font-size: clamp(2.2rem, 5.5vw, 3.6rem);
+        font-weight: 600;
+        line-height: 1.05;
+        letter-spacing: -0.025em;
+        font-variation-settings: 'opsz' 120;
+        margin: 0 0 1rem;
+        max-width: 18ch;
+        text-wrap: balance;
+      }
+
+      .lede {
+        font-size: 1.12rem;
+        color: var(--body);
+        max-width: 62ch;
+        margin: 0 0 2rem;
+      }
+
+      pre {
+        background: var(--code-ground);
+        color: var(--code-ink);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 1.1rem 1.3rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        line-height: 1.6;
+        margin: 0 0 1.25rem;
+      }
+      code { font-family: var(--mono); }
+      pre .k { color: var(--code-key); }
+      pre .n { color: var(--code-num); }
+
+      .install {
+        display: inline-block;
+        border: 1px dashed var(--rule);
+        border-radius: 5px;
+        padding: 0.5rem 0.9rem;
+        font-size: 0.88rem;
+        color: var(--body);
+        margin-bottom: 2rem;
+      }
+
+      .cta { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+      .cta a {
+        text-decoration: none;
+        border-radius: 5px;
+        padding: 0.6rem 1.2rem;
+        font-weight: 500;
+        font-size: 0.95rem;
+      }
+      .primary { background: var(--ember); color: var(--on-ember); }
+      .secondary { border: 1px solid var(--rule); color: var(--ink); }
+
+      .commitments {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+        gap: 2rem;
+        padding: 3rem 0;
+        border-top: 1px solid var(--rule);
+      }
+      .commitments h2 {
+        font-family: var(--display);
+        font-size: 1.15rem;
+        margin: 0 0 0.5rem;
+        font-variation-settings: 'opsz' 30;
+      }
+      .commitments p { margin: 0; color: var(--body); font-size: 0.94rem; }
+      .commitments code, .wins code { color: var(--ember-lift); font-size: 0.88em; }
+
+      .wins { padding: 2rem 0 0; border-top: 1px solid var(--rule); }
+      .wins h2 {
+        font-family: var(--display);
+        font-size: 1.5rem;
+        margin: 0 0 0.35rem;
+        font-variation-settings: 'opsz' 60;
+      }
+      .sub { color: var(--muted); font-size: 0.94rem; margin: 0 0 1.25rem; }
+      table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+      th {
+        text-align: left;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        font-weight: 600;
+        padding: 0.5rem 0.75rem 0.5rem 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      td {
+        padding: 0.6rem 0.75rem 0.6rem 0;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      .num { font-variant-numeric: tabular-nums; color: var(--body); }
+
+      footer {
+        border-top: 1px solid var(--rule);
+        max-width: 68rem;
+        margin: 0 auto;
+        padding: 1.5rem;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      footer a { color: var(--muted); }
+
+      @media (max-width: 34rem) {
+        nav { gap: 0.85rem; font-size: 0.85rem; }
+        nav a:nth-child(3) { display: none; }
+      }
+    </style>
+  </body>
+</html>

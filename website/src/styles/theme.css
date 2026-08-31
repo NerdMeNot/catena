@@ -1,0 +1,137 @@
+/* catena — iron and ember.
+ *
+ * The palette is a forge: cold worked iron for structure, one ember
+ * colour for the live edge. Body text and links are held to WCAG AA on
+ * their own ground, which is why the ember darkens on paper and lifts on
+ * ink rather than being one hex used everywhere.
+ */
+
+:root {
+  --catena-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --catena-display: 'Fraunces', ui-serif, Georgia, serif;
+  --catena-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --catena-iron: #33475b;
+  --catena-ember: #d9642b;
+}
+
+/* Light — paper with a faint warm cast, so the ember sits on it rather
+ * than vibrating against pure white. */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #f6e3d8;
+  --sl-color-accent: #b4501f;
+  --sl-color-accent-high: #7d3512;
+  --sl-color-white: #12161c;
+  --sl-color-gray-1: #1d242e;
+  --sl-color-gray-2: #3c4753;
+  --sl-color-gray-3: #667485;
+  --sl-color-gray-4: #98a3b0;
+  --sl-color-gray-5: #d3d9e0;
+  --sl-color-gray-6: #eceef2;
+  --sl-color-gray-7: #f5f6f8;
+  --sl-color-black: #faf9f7;
+
+  --catena-rule: #e2e5ea;
+  --catena-chip: #eef0f4;
+  --catena-faint: #667485;
+  --catena-toggle-accent: #b4501f;
+}
+
+/* Dark — ink with a blue bias, matching the iron rather than neutral
+ * grey, so the mark belongs to the page. */
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #43220f;
+  --sl-color-accent: #e07b45;
+  --sl-color-accent-high: #f6c3a3;
+  --sl-color-white: #f2f4f7;
+  --sl-color-gray-1: #e4e8ee;
+  --sl-color-gray-2: #c0c8d2;
+  --sl-color-gray-3: #8b96a4;
+  --sl-color-gray-4: #5a6675;
+  --sl-color-gray-5: #333e4b;
+  --sl-color-gray-6: #202832;
+  --sl-color-gray-7: #1a212a;
+  --sl-color-black: #12161c;
+
+  --catena-rule: #2a323d;
+  --catena-chip: #1f2731;
+  --catena-faint: #8b96a4;
+  --catena-toggle-accent: #d9642b;
+}
+
+body {
+  font-family: var(--catena-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings carry the display face; the site's personality lives here
+ * rather than in decoration. */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+h1,
+h2 {
+  font-family: var(--catena-display);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  font-variation-settings: 'opsz' 40;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--catena-mono);
+}
+
+/* Inline code reads as a token, not as a highlight. */
+.sl-markdown-content :not(pre) > code {
+  background: var(--catena-chip);
+  border: 1px solid var(--catena-rule);
+  border-radius: 3px;
+  padding: 0.1em 0.34em;
+  font-size: 0.88em;
+  font-weight: 500;
+}
+
+/* Tables carry the operator catalog, which is dense: tabular figures and
+ * a quiet header keep it scannable rather than loud. */
+.sl-markdown-content table {
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  border-collapse: collapse;
+}
+
+.sl-markdown-content th {
+  font-family: var(--catena-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  border-bottom: 1px solid var(--catena-rule);
+}
+
+.sl-markdown-content td {
+  border-bottom: 1px solid var(--catena-rule);
+  vertical-align: top;
+}
+
+/* The ⚠ markers in the operator catalog mean "this buffers" or "this
+ * drains" — they are load-bearing, so they get the ember. */
+.sl-markdown-content td:has(> :is(em)),
+.sl-markdown-content p:first-letter {
+  font-feature-settings: inherit;
+}
+
+.sl-markdown-content blockquote {
+  border-inline-start: 3px solid var(--sl-color-accent);
+  color: var(--sl-color-gray-2);
+}
+
+/* The site header: a rule rather than a shadow, matching the flat,
+ * drawn quality of the mark. */
+.header {
+  border-bottom: 1px solid var(--catena-rule);
+  background: var(--sl-color-black);
+}

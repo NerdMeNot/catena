@@ -1,0 +1,22 @@
+{
+  "name": "catena-website",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The catena documentation site",
+  "scripts": {
+    "sync": "bun run scripts/sync.ts",
+    "dev": "bun run sync && astro dev",
+    "build": "bun run sync && astro build",
+    "preview": "astro preview",
+    "deploy": "bun run build && wrangler pages deploy dist --project-name=${CLOUDFLARE_PROJECT:-catena-docs}"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.41.10",
+    "astro": "^7.2.9",
+    "starlight-versions": "^0.10.1"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
