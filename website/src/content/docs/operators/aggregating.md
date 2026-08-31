@@ -177,7 +177,7 @@ a
 func (s Seq[T]) TopNBy[K cmp.Ordered](n int, sel func(T) K) []T
 ```
 
-TopNBy returns the n elements with the largest keys, sorted descending by key; equal keys retain encounter order and the earliest elements win at the cut. Memory is O(n) — the streaming alternative to SortedByDesc().Take(n). catena.TopN(s, n) is the no-selector form; for the smallest n, use BottomNBy, or BottomNBy(n, catena.Self[T]) with no selector. Panics if n is negative.
+TopNBy returns the n elements with the largest keys, sorted descending by key; equal keys retain encounter order and the earliest elements win at the cut. Memory is O(n) — the streaming alternative to SortedByDesc().Take(n). catena.TopN(s, n) is the no-selector form, and BottomNBy is the same operation at the other end. Panics if n is negative.
 
 :::caution
 Full drain
@@ -200,7 +200,7 @@ fmt.Println(catena.Of(5, 1, 9, 3, 7).TopNBy(3, catena.Self[int]))
 func (s Seq[T]) BottomNBy[K cmp.Ordered](n int, sel func(T) K) []T
 ```
 
-BottomNBy returns the n elements with the smallest keys, sorted ascending by key; equal keys retain encounter order. Memory is O(n). Panics if n is negative.
+BottomNBy returns the n elements with the smallest keys, sorted ascending by key; equal keys retain encounter order. Memory is O(n) — the streaming alternative to SortedBy().Take(n). catena.BottomN(s, n) is the no-selector form. Panics if n is negative.
 
 :::caution
 Full drain
@@ -283,7 +283,7 @@ fmt.Println(lo, hi, ok)
 func TopN[T cmp.Ordered](s Seq[T], n int) []T
 ```
 
-TopN returns the n largest elements, sorted descending; equal elements retain encounter order. Memory is O(n). Panics if n is negative.
+TopN returns the n largest elements, sorted descending; equal elements retain encounter order. Memory is O(n) — the streaming alternative to SortedDesc(s).Take(n). Panics if n is negative.
 
 :::caution
 Full drain
@@ -295,6 +295,26 @@ fmt.Println(catena.TopN(catena.Of(5, 1, 9, 3), 2))
 
 ```
 [9 5]
+```
+
+## BottomN
+
+```go
+func BottomN[T cmp.Ordered](s Seq[T], n int) []T
+```
+
+BottomN returns the n smallest elements, sorted ascending; equal elements retain encounter order. Memory is O(n) — the streaming alternative to Sorted(s).Take(n). Panics if n is negative.
+
+:::caution
+Full drain
+:::
+
+```go
+fmt.Println(catena.BottomN(catena.Of(5, 1, 9, 3), 2))
+```
+
+```
+[1 3]
 ```
 
 ## SumOf

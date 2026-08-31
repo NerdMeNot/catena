@@ -148,10 +148,17 @@ func MinMax[T cmp.Ordered](s Seq[T]) (min, max T, ok bool) {
 }
 
 // TopN returns the n largest elements, sorted descending; equal elements
-// retain encounter order. Memory is O(n). ⚠ Full drain. Panics if n is
-// negative.
+// retain encounter order. Memory is O(n) — the streaming alternative to
+// SortedDesc(s).Take(n). ⚠ Full drain. Panics if n is negative.
 func TopN[T cmp.Ordered](s Seq[T], n int) []T {
 	return topNBy("TopN", s, n, Self[T], true)
+}
+
+// BottomN returns the n smallest elements, sorted ascending; equal elements
+// retain encounter order. Memory is O(n) — the streaming alternative to
+// Sorted(s).Take(n). ⚠ Full drain. Panics if n is negative.
+func BottomN[T cmp.Ordered](s Seq[T], n int) []T {
+	return topNBy("BottomN", s, n, Self[T], false)
 }
 
 // Contains reports whether v occurs in s; stops at the first match.

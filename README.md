@@ -168,7 +168,7 @@ either kind.
 
 ## Documentation
 
-**[Operator reference](docs/operators/README.md)** — all 182 operators
+**[Operator reference](docs/operators/README.md)** — all 183 operators
 across 14 pages, each with its signature, its memory and termination
 behaviour, and a worked example that `go test` runs and verifies.
 

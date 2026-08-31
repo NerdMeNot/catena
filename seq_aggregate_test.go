@@ -320,6 +320,48 @@ func TestTopNStability(t *testing.T) {
 	})
 }
 
+// BottomN is TopN's mirror and routes through the same bounded heap, so the
+// properties worth pinning are the ones the desc flag inverts: the sort
+// direction, which end survives the cut, and that equal elements at the
+// boundary still resolve to the earliest seen.
+func TestBottomNStability(t *testing.T) {
+	t.Run("ascending_and_bounded", func(t *testing.T) {
+		got := catena.BottomN(catena.Of(5, 1, 9, 3, 7), 3)
+		if !slices.Equal(got, []int{1, 3, 5}) {
+			t.Fatalf("got %v", got)
+		}
+	})
+	t.Run("n_larger_than_input", func(t *testing.T) {
+		got := catena.BottomN(catena.Of(3, 1, 2), 10)
+		if !slices.Equal(got, []int{1, 2, 3}) {
+			t.Fatalf("got %v", got)
+		}
+	})
+	t.Run("zero_and_empty", func(t *testing.T) {
+		if got := catena.BottomN(catena.Of(3, 1, 2), 0); got != nil {
+			t.Fatalf("n=0: got %v, want nil", got)
+		}
+		if got := catena.BottomN(catena.Empty[int](), 3); got != nil {
+			t.Fatalf("empty: got %v, want nil", got)
+		}
+	})
+	t.Run("agrees_with_sort", func(t *testing.T) {
+		in := []int{8, 3, 3, 9, 1, 5, 3, 7, 0, 4}
+		want := slices.Clone(in)
+		slices.Sort(want)
+		for n := range len(in) + 2 {
+			got := catena.BottomN(catena.FromSlice(in), n)
+			exp := want[:min(n, len(want))]
+			if len(got) == 0 && len(exp) == 0 {
+				continue
+			}
+			if !slices.Equal(got, exp) {
+				t.Fatalf("n=%d: got %v, want %v", n, got, exp)
+			}
+		}
+	})
+}
+
 func TestJoinToStringEmpty(t *testing.T) {
 	if got := catena.Empty[int]().JoinToString(",", func(int) string { return "x" }); got != "" {
 		t.Fatalf("got %q", got)

@@ -591,6 +591,7 @@ func Max[T cmp.Ordered](s Seq[T]) (T, bool)                   // ⚠∞; cmp.Com
 func Min[T cmp.Ordered](s Seq[T]) (T, bool)                   // ⚠∞
 func MinMax[T cmp.Ordered](s Seq[T]) (min, max T, ok bool)    // ⚠∞; one pass
 func TopN[T cmp.Ordered](s Seq[T], n int) []T                 // ⚠∞; mem O(k); sorted desc; stable
+func BottomN[T cmp.Ordered](s Seq[T], n int) []T              // ⚠∞; mem O(k); sorted asc; stable
 func Contains[T comparable](s Seq[T], v T) bool               // ◐
 func IndexOf[T comparable](s Seq[T], v T) int                 // ◐; -1 if none
 func NonZero[T comparable](s Seq[T]) Seq[T]                   // drop zero values (v1 "Compact", renamed §3)
@@ -717,7 +718,7 @@ Choosing between them: `Seq` for I/O, channels, large scans, anything where shor
 
 | Class | Operators |
 |---|---|
-| O(k) — arg-bounded | `TakeLast`, `DropLast`, `Windowed` (size), `TopNBy`, `BottomNBy`, `TopN` |
+| O(k) — arg-bounded | `TakeLast`, `DropLast`, `Windowed` (size), `TopNBy`, `BottomNBy`, `TopN`, `BottomN` |
 | O(chunk/run) | `Chunked`, `ChunkedBy` |
 | O(keys) — distinct-bounded | `Distinct`, `DistinctBy`, `DistinctWith`, `FoldBy`, `Union`, `Intersect`†, `Except`†, `Tally*`, `ToKeySet`, `GroupBy`‡, `IndexBy`, `Associate*` |
 | O(all) — entire input | `Sorted*`, `SortedBy*`, `SortedWith`, `Reversed`, `Cycle`, `Unzip`, `JoinBy` (right side), `Collect`, `ToList`, `CollectAll`, `Partition` |
@@ -732,7 +733,7 @@ Choosing between them: `Seq` for I/O, channels, large scans, anything where shor
 
 ### 7.1 Constraint tightening
 
-No method on `Seq[T any]` may require anything of `T`. Permanently method-less: `Distinct` · `Dedupe` · `Sorted` · `Sum` · `Product` · `Average` · `Max` · `Min` · `MinMax` · `TopN` · `Contains` · `IndexOf` · `ToKeySet` · `Tally` · `NonZero` · `AssociateWith` · `Equal` · `Union` · `Intersect` · `Except` · `Seq2.ToMap` · `Unzip`.
+No method on `Seq[T any]` may require anything of `T`. Permanently method-less: `Distinct` · `Dedupe` · `Sorted` · `Sum` · `Product` · `Average` · `Max` · `Min` · `MinMax` · `TopN` · `BottomN` · `Contains` · `IndexOf` · `ToKeySet` · `Tally` · `NonZero` · `AssociateWith` · `Equal` · `Union` · `Intersect` · `Except` · `Seq2.ToMap` · `Unzip`.
 
 All present as package functions. Cost: one broken link mid-chain, or use the `-By` variant.
 
@@ -790,7 +791,7 @@ Each entry here is a **decision**, recorded so silence never invites re-litigati
 - **`MapWhile`.** `Map(f).TakeWhile(ok)` or `FilterMap` cover it; the fused form earns nothing (§8.3 table discipline).
 - **Complex numbers in `Numeric`.** Not ordered; half the surface would be meaningless. §2.
 - **Predicate helpers** (`IsZero`, `Not`, `And`). `func(n int) bool { return n > 3 }` is verbose but obvious; a `fn` package trades one kind of noise for another.
-- **A 200-method surface.** Kotlin has one because extensions are free. The point of generic methods is that `s.` autocompletes usefully. What has to stay autocompletable is `Seq`'s own method set, and that lands at 84. Across the four types the library exposes 259 exported symbols, but 77 of those are the mechanically generated `List` mirror, leaving 182 distinct operations — and that is the ceiling.
+- **A 200-method surface.** Kotlin has one because extensions are free. The point of generic methods is that `s.` autocompletes usefully. What has to stay autocompletable is `Seq`'s own method set, and that lands at 84. Across the four types the library exposes 260 exported symbols, but 77 of those are the mechanically generated `List` mirror, leaving 183 distinct operations — and that is the ceiling.
 - **Reimplementing `slices` / `maps`.** No `BinarySearch`, no `Compare`. `Collect()` is the handoff.
 
 ### 7.8 Shape-growing method signatures (found in implementation)

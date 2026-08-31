@@ -6,7 +6,14 @@ All notable changes to catena are documented here. The format follows
 
 ## [Unreleased]
 
-Documentation only — no API, behaviour or performance change.
+### Added
+
+- `BottomN(s, n)` — the no-selector form of `BottomNBy`, completing the
+  pair with `TopN`. Without it, wanting the smallest *n* meant either
+  `BottomNBy(n, catena.Self[T])` or, more likely, `Sorted(s).Take(n)`,
+  which quietly gives up the O(n) memory bound that makes the operator
+  worth having. Routes through the same bounded heap, with the same
+  stability and tie rules.
 
 ### Fixed
 

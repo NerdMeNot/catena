@@ -195,7 +195,7 @@ var families = []family{
 		Members: []string{
 			"Seq.MaxBy", "Seq.MinBy", "Seq.MaxOf", "Seq.MinOf", "Seq.MinMaxOf",
 			"Seq.MaxWith", "Seq.MinWith", "Seq.TopNBy", "Seq.BottomNBy",
-			"Max", "Min", "MinMax", "TopN",
+			"Max", "Min", "MinMax", "TopN", "BottomN",
 			"Seq.SumOf", "Seq.ProductOf", "Seq.AverageOf", "Sum", "Product", "Average",
 			"Seq.JoinToString", "Join",
 		},

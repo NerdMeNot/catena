@@ -76,6 +76,7 @@ var dedicatedCovered = map[string]string{
 	// package functions with dedicated homes
 	"Equal":     "TestEqual",
 	"TopN":      "registry + TestTopNStability",
+	"BottomN":   "registry + TestBottomNStability",
 	"Windowed":  "registry + TestWindowedShapes",
 	"Chunked":   "registry + TestWindowedShapes (L3)",
 	"ChunkedBy": "registry + TestChunkedByRuns",

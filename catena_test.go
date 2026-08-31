@@ -36,6 +36,7 @@ func TestConstructionPanics(t *testing.T) {
 		{"TopNBy", "TopNBy", func() { s.TopNBy(-1, catena.Self[int]) }},
 		{"BottomNBy", "BottomNBy", func() { s.BottomNBy(-1, catena.Self[int]) }},
 		{"TopN", "TopN", func() { catena.TopN(s, -1) }},
+		{"BottomN", "BottomN", func() { catena.BottomN(s, -1) }},
 		{"Chunked/zero", "Chunked", func() { catena.Chunked(s, 0) }},
 		{"Chunked/negative", "Chunked", func() { catena.Chunked(s, -3) }},
 		{"Windowed/size", "Windowed", func() { catena.Windowed(s, 0, 1) }},

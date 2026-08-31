@@ -240,6 +240,27 @@ func init() {
 			},
 		},
 		{
+			name:   "BottomN",
+			covers: []string{"BottomN"},
+			op:     func(s catena.Seq[int]) any { return catena.BottomN(s, 3) },
+			model: func(in []int) any {
+				type e struct{ v, i int }
+				es := make([]e, len(in))
+				for i, v := range in {
+					es[i] = e{v, i}
+				}
+				slices.SortStableFunc(es, func(a, b e) int { return a.v - b.v })
+				if len(es) > 3 {
+					es = es[:3]
+				}
+				var out []int
+				for _, x := range es {
+					out = append(out, x.v)
+				}
+				return out
+			},
+		},
+		{
 			name:   "Contains",
 			covers: []string{"Contains"},
 			op:     func(s catena.Seq[int]) any { return catena.Contains(s, 3) },

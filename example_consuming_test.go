@@ -485,6 +485,11 @@ func ExampleTopN() {
 	// Output: [9 5]
 }
 
+func ExampleBottomN() {
+	fmt.Println(catena.BottomN(catena.Of(5, 1, 9, 3), 2))
+	// Output: [1 3]
+}
+
 func ExampleSum() {
 	// Integer overflow wraps, exactly as + does.
 	fmt.Println(catena.Sum(catena.Of(1, 2, 3)))

@@ -222,16 +222,17 @@ func topNBy[T any, K cmp.Ordered](op string, s Seq[T], n int, sel func(T) K, des
 // TopNBy returns the n elements with the largest keys, sorted descending
 // by key; equal keys retain encounter order and the earliest elements win
 // at the cut. Memory is O(n) — the streaming alternative to
-// SortedByDesc().Take(n). catena.TopN(s, n) is the no-selector form; for the
-// smallest n, use BottomNBy, or BottomNBy(n, catena.Self[T]) with no
-// selector. ⚠ Full drain. Panics if n is negative.
+// SortedByDesc().Take(n). catena.TopN(s, n) is the no-selector form, and
+// BottomNBy is the same operation at the other end. ⚠ Full drain. Panics if
+// n is negative.
 func (s Seq[T]) TopNBy[K cmp.Ordered](n int, sel func(T) K) []T {
 	return topNBy("TopNBy", s, n, sel, true)
 }
 
 // BottomNBy returns the n elements with the smallest keys, sorted
-// ascending by key; equal keys retain encounter order. Memory is O(n).
-// ⚠ Full drain. Panics if n is negative.
+// ascending by key; equal keys retain encounter order. Memory is O(n) —
+// the streaming alternative to SortedBy().Take(n). catena.BottomN(s, n) is
+// the no-selector form. ⚠ Full drain. Panics if n is negative.
 func (s Seq[T]) BottomNBy[K cmp.Ordered](n int, sel func(T) K) []T {
 	return topNBy("BottomNBy", s, n, sel, false)
 }

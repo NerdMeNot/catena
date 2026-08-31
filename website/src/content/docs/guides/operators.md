@@ -125,7 +125,7 @@ of `T`.
 |---|---|
 | `Distinct`, `Dedupe` | [S]; first wins / consecutive only |
 | `Sorted`, `SortedDesc` | ⚠ mem all, ⚠∞; stable |
-| `Sum`, `Product`, `Average`, `Max`, `Min`, `MinMax`, `TopN` | ⚠∞ |
+| `Sum`, `Product`, `Average`, `Max`, `Min`, `MinMax`, `TopN`, `BottomN` | ⚠∞ |
 | `Contains`, `IndexOf` | ◐ |
 | `NonZero` | drops zero values |
 | `ToKeySet`, `Tally`, `AssociateWith` | ⚠∞ |

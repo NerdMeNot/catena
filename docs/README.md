@@ -14,7 +14,7 @@ Start here, read in roughly this order:
   catena adds (nothing, measured), and when fusion wins outright.
 - **[Releasing](06-releasing.md)** — how a release is cut and verified.
 
-**[Operator reference](operators/README.md)** — all 182 operators across 14 pages,
+**[Operator reference](operators/README.md)** — all 183 operators across 14 pages,
 each with its signature, its memory and termination behaviour, and a
 worked example that `go test` runs and verifies. Generated from the
 library's own doc comments and its Example functions, so it cannot drift
