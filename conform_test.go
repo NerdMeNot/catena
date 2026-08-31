@@ -1,6 +1,6 @@
 package catena_test
 
-// The conformance harness (§9 of the spec): fixtures, invariants C1-C13,
+// The conformance harness: fixtures, invariants C1-C13,
 // and the two registries every operator joins. Each *_test.go file
 // registers the cases for its source file from an init function, so the
 // pairing between a file and its tests is visible in the file list; the
@@ -55,7 +55,7 @@ type pair2 struct{ A, B any }
 
 var errBoom = errors.New("boom")
 
-// ---- fixtures (§9.2) ----
+// ---- fixtures ----
 
 // tracked yields 0..n-1, counting iteration starts and deferred cleanups:
 // every started iteration must run its cleanup, even on early termination

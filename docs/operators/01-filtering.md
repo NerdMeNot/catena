@@ -91,7 +91,7 @@ fmt.Println(kept, errs)
 func Distinct[T comparable](s Seq[T]) Seq[T]
 ```
 
-Distinct yields elements not seen before; the first occurrence wins. Distinct is a package function, not a method, and so are the others in this file: they constrain the element type (comparable, cmp.Ordered, Numeric), and a method on Seq[T any] may require nothing of T (§7.1 of the spec) — or, for the Flatten family, they constrain the receiver's shape. Every comparable-constrained function panics at runtime if T is an interface type holding a non-comparable value. The chain continues normally after them: catena.Distinct(s).Filter(f). On input already sorted by the compared value, Dedupe is the O(1)-memory equivalent.
+Distinct yields elements not seen before; the first occurrence wins. Distinct is a package function, not a method, and so are the others in this file: they constrain the element type (comparable, cmp.Ordered, Numeric), and a method on Seq[T any] may require nothing of T — or, for the Flatten family, they constrain the receiver's shape. Every comparable-constrained function panics at runtime if T is an interface type holding a non-comparable value. The chain continues normally after them: catena.Distinct(s).Filter(f). On input already sorted by the compared value, Dedupe is the O(1)-memory equivalent.
 
 :::caution
 Retains one entry per distinct value — unbounded

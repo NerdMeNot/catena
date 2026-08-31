@@ -1,6 +1,6 @@
 package catena_test
 
-// Cross-cutting contracts of the package itself: the §4.10 argument table
+// Cross-cutting contracts of the package itself: the argument table
 // (construction panics carry the catena: prefix, zero counts are values),
 // free interop with iter.Seq, and the version constant the release
 // workflow verifies.
@@ -14,7 +14,7 @@ import (
 	"github.com/NerdMeNot/catena"
 )
 
-// ---- §4.10: construction-time panics, all with the catena: prefix ----
+// ---- construction-time panics, all with the catena: prefix ----
 
 func TestConstructionPanics(t *testing.T) {
 	s := catena.Of(1, 2, 3)

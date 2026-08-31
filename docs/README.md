@@ -23,6 +23,8 @@ from the code.
 API reference with full signatures:
 [pkg.go.dev/github.com/NerdMeNot/catena](https://pkg.go.dev/github.com/NerdMeNot/catena).
 
-The design rationale — why each decision was made and what was rejected —
-lives in [SPEC.md](../SPEC.md) at the repository root. When a doc here and
-the spec disagree, the spec wins and the doc has a bug; please report it.
+Each operator's contract — its argument edges, memory class, drain
+behaviour, ordering and tie policy — is stated in its own doc comment and
+enforced by the conformance suite, so the reference and the code cannot
+disagree. If a doc here and the library disagree, that is a bug; please
+report it.

@@ -4,6 +4,18 @@ All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
 
+## [Unreleased]
+
+### Removed
+
+- `SPEC.md`. The design document had become a second place where the
+  library's contracts were written down, and the two could disagree — as
+  they did: its `Try` rule set contradicted the code, its symbol counts had
+  drifted, and it specified a conformance harness shape that does not
+  exist. Each operator's contract lives in its own doc comment, where godoc
+  shows it and the conformance suite enforces it. The document remains in
+  the `v1.2.0` tag for anyone who wants the rejected-alternatives history.
+
 ## [1.2.0] — 2026-08-31
 
 One new operator and a substantial documentation pass. The pass came out of
@@ -66,9 +78,9 @@ place people read.
   certifying the opposite; it now says what it means. README notes that
   adopting catena raises a consumer's own `go` directive to 1.27, and its
   two non-compiling snippets are fixed.
-- SPEC's naming law gained the eight suffix patterns it did not cover,
-  its known exceptions (`AssociateWith`, `WithIndex`), and the third
-  reason an operation lands at package level (receiver shape).
+- The naming law gained the eight suffix patterns it did not cover, its
+  known exceptions (`AssociateWith`, `WithIndex`), and the third reason an
+  operation lands at package level (receiver shape).
 
 ## [1.1.0] — 2026-08-31
 
@@ -90,8 +102,8 @@ it is retracted in `go.mod` and should not be used. Start here.
   `DedupeBy` (O(1) streaming distinct), `ChunkedBy`, `Windowed`, `JoinBy`
   (relational inner join).
 - Every operator's contract — argument edges, memory class, drain class,
-  ordering and tie policy, error semantics — specified in SPEC.md and
-  enforced by the C1–C15 conformance suite, a completeness check that
+  ordering and tie policy, error semantics — specified in each operator's
+  doc comment and enforced by the C1–C15 conformance suite, a completeness check that
   fails CI for any unregistered export, property tests, and 100%
   statement coverage of the library.
 - An operator reference covering all 182 operators, each with a worked

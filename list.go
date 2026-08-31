@@ -37,7 +37,7 @@ func (l List[T]) Clone() List[T] { return List[T](slices.Clone([]T(l))) }
 func (l List[T]) AsSeq() Seq[T] { return FromSlice([]T(l)) }
 
 // FoldRight reduces right to left. It exists only on List: a right fold
-// needs the whole sequence in memory, which a List already is (§7.5).
+// needs the whole sequence in memory, which a List already is.
 func (l List[T]) FoldRight[A any](init A, f func(T, A) A) A {
 	acc := init
 	for i := len(l) - 1; i >= 0; i-- {

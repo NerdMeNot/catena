@@ -81,7 +81,7 @@ function rewriteLinks(md: string, repoUrl: string): string {
     .replace(/\]\((?:\.\.\/)?examples\/\d\d-([a-z-]+)(?:\/main\.go)?\)/g, (_, slug) =>
       `](/examples/${slug}/)`)
     // repo files that have no site page: link to GitHub
-    .replace(/\]\((?:\.\.\/)?((?:SPEC|CHANGELOG|LICENSE|README)\.md|[a-z_]+\.go|[a-z_]+_test\.go)\)/g,
+    .replace(/\]\((?:\.\.\/)?((?:CHANGELOG|LICENSE|README)\.md|[a-z_]+\.go|[a-z_]+_test\.go)\)/g,
       (_, file) => `](${repoUrl}/blob/main/${file})`)
     .replace(/\]\(docs\/README\.md\)/g, '](/guides/getting-started/)')
     .replace(/\]\(examples\/\)/g, '](/examples/)')

@@ -1,6 +1,6 @@
 package catena_test
 
-// C14: the Try invariants (§4.9 R1-R5), verified per operator with
+// C14: the Try invariants (R1-R5), verified per operator with
 // instrumented callbacks.
 
 import (

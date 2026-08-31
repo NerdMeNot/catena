@@ -1,7 +1,7 @@
 package catena_test
 
-// Runnable examples: the resource-owning producer patterns the spec
-// commits to documenting (§4.2 lazy acquisition, §7.7 reader adapter),
+// Runnable examples: the resource-owning producer patterns the library
+// documents rather than ships — lazy acquisition and the reader adapter —
 // plus the operators that justify the library.
 
 import (
@@ -13,7 +13,8 @@ import (
 	"github.com/NerdMeNot/catena"
 )
 
-// Lines adapts an io.Reader into a Try of its lines — the §7.7 pattern.
+// Lines adapts an io.Reader into a Try of its lines — the reader-adapter
+// pattern the library documents rather than ships.
 // The reader is wrapped lazily inside the closure: a sequence that is
 // never consumed never reads, and early termination stops the scan.
 func Lines(open func() (*strings.Reader, error)) catena.Try[string] {
@@ -56,7 +57,7 @@ func Example_lazyAcquisition() {
 	// opened after consuming: 1
 }
 
-// Rows is the §4.2 producer pattern for *sql.Rows: lazy acquisition, so
+// Rows is the producer pattern for *sql.Rows: lazy acquisition, so
 // an unconsumed Try holds no resource, and defer runs on early
 // termination through any number of stages. bake_test.go exercises it
 // against a real database/sql driver.

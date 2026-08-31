@@ -3,7 +3,7 @@ package catena
 // The batch operators. All three are package functions of necessity, not
 // style: a method on Seq[T] returning Seq[[]T] is an instantiation cycle —
 // each Seq[T] would require Seq[[]T]'s method set, which would require
-// Seq[[][]T]'s, forever (§7.8 of the spec). Every emitted slice is fresh;
+// Seq[[][]T]'s, forever. Every emitted slice is fresh;
 // retaining one is always safe (implementation law L3).
 
 import "slices"

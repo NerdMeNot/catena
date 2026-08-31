@@ -2,7 +2,7 @@ package catena
 
 import "iter"
 
-// Seq2 is a bridge back to Seq, not a peer surface (§2.2 of the spec). The
+// Seq2 is a bridge back to Seq, not a peer surface. The
 // operators deliberately absent from it, and what to use instead, are listed
 // on the Seq2 type in catena.go.
 //

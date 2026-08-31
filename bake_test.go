@@ -1,9 +1,9 @@
 package catena_test
 
-// The bake-period pipelines (spec §13, post-v0.1): the library against
+// The bake-period pipelines: the library against
 // real machinery rather than fixtures.
 //
-// Pipeline 1 drives the §4.2 lazy-acquisition Rows pattern through the
+// Pipeline 1 drives the lazy-acquisition Rows pattern through the
 // REAL database/sql stack — a minimal in-memory driver.Driver serves the
 // rows, so sql.Rows lifecycle, Scan conversion errors, iteration errors,
 // and Close-on-early-termination are all the standard library's own code
@@ -144,7 +144,7 @@ func TestBakeSQLPipeline(t *testing.T) {
 			t.Fatalf("got %v", got)
 		}
 		if memRowsClosed.Load() != before+1 {
-			t.Fatal("early termination through Ignore().Take(3) did not close the driver rows — §4.2 broken against real database/sql")
+			t.Fatal("early termination through Ignore().Take(3) did not close the driver rows — lazy acquisition is broken against real database/sql")
 		}
 	})
 

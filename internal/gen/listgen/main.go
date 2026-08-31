@@ -1,5 +1,5 @@
 // Command listgen generates list_gen.go: the eager List[T] mirror of the
-// Seq[T] operation set (§10 of the spec).
+// Seq[T] operation set.
 //
 // It parses the package's Seq method declarations and emits one List
 // method per Seq method, skipping:

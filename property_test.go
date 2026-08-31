@@ -1,6 +1,6 @@
 package catena_test
 
-// §9.4: property-based equivalences, on top of the example-based
+// Property-based equivalences, on top of the example-based
 // conformance suite.
 
 import (

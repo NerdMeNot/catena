@@ -2,7 +2,7 @@ package catena_test
 
 // Conformance registrations for funcs.go — the constraint-bound package
 // functions — plus Equal's pull-side hygiene and the NaN convention
-// (§4.12) shared by the whole ordered-aggregation surface.
+// shared by the whole ordered-aggregation surface.
 
 import (
 	"math"
@@ -388,7 +388,7 @@ func TestEqual(t *testing.T) {
 	})
 }
 
-// ---- §4.12 float semantics ----
+// ---- float semantics ----
 
 func TestFloatNaN(t *testing.T) {
 	nan := math.NaN()

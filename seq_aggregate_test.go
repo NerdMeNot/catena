@@ -1,7 +1,7 @@
 package catena_test
 
 // Conformance registrations for seq_aggregate.go, plus the tie and
-// stability policies (§4.11): first-wins for the Max/Min families,
+// stability policies: first-wins for the Max/Min families,
 // encounter order preserved through TopNBy's bounded heap.
 
 import (
@@ -230,7 +230,7 @@ func init() {
 	}...)
 }
 
-// ---- §4.11 ordering, ties, collisions ----
+// ---- ordering, ties, collisions ----
 
 func TestTiePolicies(t *testing.T) {
 	type item struct {

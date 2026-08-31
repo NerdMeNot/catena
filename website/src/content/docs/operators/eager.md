@@ -126,7 +126,7 @@ fmt.Println(first)
 func (l List[T]) FoldRight[A any](init A, f func(T, A) A) A
 ```
 
-FoldRight reduces right to left. It exists only on List: a right fold needs the whole sequence in memory, which a List already is (§7.5).
+FoldRight reduces right to left. It exists only on List: a right fold needs the whole sequence in memory, which a List already is.
 
 ```go
 // Exists only on List: a right fold needs the whole sequence, which

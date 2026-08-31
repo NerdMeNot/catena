@@ -6,8 +6,7 @@ import (
 )
 
 // Try operators follow five uniform rules, R1–R5, stated once on the Try
-// type in catena.go and referred to by number throughout this file (§4.9 of
-// the spec).
+// type in catena.go and referred to by number throughout this file.
 //
 // Bodies use direct source invocation, not range — see the note in seq.go.
 

@@ -1,13 +1,13 @@
 package catena_test
 
-// §9.5: every exported symbol must be registered in the conformance
+// Every exported symbol must be registered in the conformance
 // registries or explicitly listed as covered by a dedicated test. An
 // operator that exists but is untested fails CI — this is the mechanism
 // that keeps the conformance suite true over time, not a review
 // convention.
 //
 // Enumeration uses go/parser over the package source (not reflect: Go
-// cannot enumerate uninstantiated generic methods at runtime — §7.3).
+// cannot enumerate uninstantiated generic methods at runtime).
 
 import (
 	"go/ast"

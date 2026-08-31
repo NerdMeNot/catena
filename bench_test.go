@@ -1,6 +1,6 @@
 package catena_test
 
-// Benchmarks backing §8 of the spec: the honest numbers against
+// Benchmarks backing the performance guide: the honest numbers against
 // hand-written loops, the generic-method-vs-package-function question,
 // and the fused-operator wins. Run: go test -bench . -benchmem
 
@@ -51,7 +51,7 @@ func BenchmarkPipeline4StageHandLoop(b *testing.B) {
 
 // mapFunc is the package-function twin of Seq.Map, for measuring whether
 // generic METHODS (new in Go 1.27) carry a dictionary-call penalty over
-// generic functions (§8.1).
+// generic functions.
 func mapFunc[T, U any](s catena.Seq[T], f func(T) U) catena.Seq[U] {
 	return func(yield func(U) bool) {
 		for v := range s.Seq() {

@@ -134,7 +134,7 @@ func emptyFn[T any](yield func(T) bool) { _ = yield }
 
 func emptyFn2[K, V any](yield func(K, V) bool) { _ = yield }
 
-// src adapts a possibly-nil Seq to a ranged iter.Seq (§4.6: nil is empty).
+// src adapts a possibly-nil Seq to a ranged iter.Seq: nil is empty.
 func src[T any](s Seq[T]) iter.Seq[T] {
 	if s == nil {
 		return emptyFn[T]
@@ -159,7 +159,7 @@ func srcTry[T any](t Try[T]) iter.Seq2[T, error] {
 }
 
 // negCheck panics with the construction-time message form for negative
-// count arguments (§4.10).
+// count arguments.
 func negCheck(op string, n int) {
 	if n < 0 {
 		panic("catena: " + op + ": negative count")

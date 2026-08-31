@@ -12,7 +12,7 @@ import (
 //
 // Distinct is a package function, not a method, and so are the others in this
 // file: they constrain the element type (comparable, cmp.Ordered, Numeric),
-// and a method on Seq[T any] may require nothing of T (§7.1 of the spec) — or,
+// and a method on Seq[T any] may require nothing of T — or,
 // for the Flatten family, they constrain the receiver's shape. Every
 // comparable-constrained function panics at runtime if T is an interface type
 // holding a non-comparable value. The chain continues normally after them:

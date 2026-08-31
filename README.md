@@ -182,7 +182,6 @@ Guides, in reading order:
 6. [Releasing](docs/06-releasing.md) — how a release is cut and verified
 
 Also: [runnable examples](examples/) · [API reference](https://pkg.go.dev/github.com/NerdMeNot/catena)
-· [SPEC.md](SPEC.md), the full design — every decision, and what was rejected.
 
 ## Status
 
