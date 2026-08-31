@@ -320,7 +320,8 @@ func (s Seq[T]) Reversed() Seq[T] {
 // Once returns a sequence that panics if iterated more than once — a
 // development guard for the single-pass contract, not a synchronization
 // mechanism. This is the one operator whose state deliberately lives
-// outside the iteration closure.
+// outside the iteration closure. (catena.Once1 is unrelated: it constructs
+// a one-element sequence.)
 //
 //catena:seq-only
 func (s Seq[T]) Once() Seq[T] {

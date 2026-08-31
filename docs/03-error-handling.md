@@ -17,7 +17,9 @@ errs       := t.Errs().Collect()    // the other half: just the errors
 ## The five rules
 
 Every `Try` operator follows the same rule set, so nothing needs looking
-up per operator:
+up per operator. They come from one idea: **an errored element is opaque
+data to an intermediate and meaningful to a terminal.** Rules 1–3 are the
+first half, rule 5 is the second; rule 4 is a producer convention.
 
 1. **Intermediates never inspect errored elements.** `Filter`'s predicate
    and `Map`'s function are simply not called on them; the errored element
@@ -25,7 +27,10 @@ up per operator:
 2. **Counting is positional.** `Take(3)` takes three *elements*, errored
    or not — so it consumes at most three, which is what keeps termination
    reasoning intact. The spelling for "three successes" is
-   `.Ignore().Take(3)`.
+   `.Ignore().Take(3)`. Note the deliberate asymmetry with `Count`: `Take`
+   is an intermediate and counts errored elements, while `Count` is a
+   terminal and stops at the first error (rule 5), returning the successes
+   before it.
 3. **An error never terminates `TakeWhile`.** Only a successful element
    failing the predicate ends the sequence.
 4. **Operators that generate an error yield the zero value with it.**
@@ -34,6 +39,19 @@ up per operator:
 5. **Single-error terminals stop at the first error** (`Collect`, `Fold`,
    `ForEach`, `Err`, `Count`). Only `CollectAll` and the intermediates
    continue past errors.
+
+## `Try` is deliberately small
+
+`Try` carries 13 intermediates, three policy exits back to `Seq` (`Ignore`,
+`Errs`, `Must`) and the collecting terminals — against the 37 chainable
+operators `Seq` has. That is the design, not an omission: the
+moment data can fail, you should pick an error policy early and get the
+full API back. The intended shape is to stay in `Try` only while errors are
+still in play, then commit — `Ignore()`, `Must()`, `Collect()`,
+`CollectAll()` — and continue on `Seq`.
+
+If you find yourself wanting `Sorted` or `GroupBy` on a `Try`, the errors
+have been carried one stage too far.
 
 ## Adding context where it exists
 

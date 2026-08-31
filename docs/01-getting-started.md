@@ -88,7 +88,7 @@ once. Crossing between them is always explicit: `l.AsSeq()` and
 [walks through what actually runs when, and when eager is the better
 choice](02-concepts.md#eager-vs-lazy--the-actual-difference).
 
-## Three rules to know before anything bites
+## Four rules to know before anything bites
 
 1. **Treat every `Seq` as single-pass.** Whether re-iteration works depends
    on the producer; slices and ranges are safe, channels and rows are not.
@@ -98,5 +98,36 @@ choice](02-concepts.md#eager-vs-lazy--the-actual-difference).
 3. **Bad arguments panic at construction**, with a `catena:` prefix, at the
    line that made the mistake — not three files later inside a range loop.
    Zero counts are valid values, never panics.
+4. **Operations that constrain the element type are package functions.**
+   `catena.Distinct(s)`, not `s.Distinct()` — a method on `Seq[T any]` may
+   require nothing of `T`, so anything needing `comparable`, `cmp.Ordered`
+   or a numeric `T` lives at package level. The chain continues normally
+   afterwards: `catena.Distinct(s).Filter(f)`. If the compiler tells you
+   `Seq[int] has no field or method Distinct`, this is why — the operator
+   exists, it is just spelled differently.
 
 The rest of the contract system is in [02-concepts.md](02-concepts.md).
+
+## If you are coming from somewhere else
+
+Most names are the Kotlin ones. Where your habit differs:
+
+| You'd type | catena |
+|---|---|
+| `Where` (LINQ) | `Filter` |
+| `Select` (LINQ) | `Map` |
+| `SelectMany` (LINQ) | `FlatMap` |
+| `Skip` (LINQ) | `Drop` |
+| `OrderBy` / `OrderByDescending` | `SortedBy` / `SortedByDesc` |
+| `First(pred)` (LINQ) | `Find` — `First()` takes no predicate |
+| `Count(pred)` (LINQ) | `CountWhere` — `Count()` takes no predicate |
+| `ToDictionary` / `associateBy` | `Associate` / `IndexBy` |
+| `Aggregate` (LINQ) / `fold` | `Fold` |
+| `Distinct()` (method, anywhere) | `catena.Distinct(s)` — a package function |
+| `chunked` / `chunks` | `catena.Chunked(s, n)` — a package function |
+| `sortedByDescending().take(n)` | `TopNBy(n, sel)` — bounded memory |
+| `peek` / `inspect` | `OnEach` |
+| `any` / `all` / `none` | `Any` / `All` / `None` |
+
+`Filter` and `Map` keep their Kotlin/Rust names rather than LINQ's because
+they match `slices.DeleteFunc` and the rest of Go's own vocabulary.

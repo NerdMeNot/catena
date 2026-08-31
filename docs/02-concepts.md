@@ -94,8 +94,12 @@ an intermediate collection per stage would hurt — which is also what the
 memory-class operators (`FoldBy`, `TopNBy`, `DedupeBy`) are for.
 
 Crossing is always explicit — `l.AsSeq()` to go lazy (free: it's a view),
-`s.ToList()` to materialize (a drain) — and no operator silently changes
-evaluation strategy. The two surfaces are conformance-checked to agree:
+`s.ToList()` to materialize (a drain) — and an operator's evaluation
+strategy is visible in its return type. Four `List` mirrors do hand back a
+lazy value, because their `Seq` counterparts do: `WithIndex` and
+`ZipWithNext` return a `Seq2`, `MapErr` and `FilterErr` return a `Try`.
+Everything else returns a `List`. The two surfaces are conformance-checked
+to agree:
 `l.Op(x)` always equals `l.AsSeq().Op(x)` collected, so switching modes
 never changes results, only when and how the work happens.
 
@@ -115,6 +119,18 @@ slice happily, `FromChan` yields nothing the second time, a database
 producer would re-query or fail. The contract is therefore: **treat every
 `Seq` as single-pass**, and treat re-iterability as a property of the
 producer you happen to have (each constructor documents which it is).
+
+**Operators do not affect this either way.** Every operator builds its state
+inside the closure it returns, never in the enclosing call, so a chain is
+re-iterable exactly when its root producer is —
+`FromSlice(xs).Filter(f).Map(g).Chunked(3)` is as re-iterable as
+`FromSlice(xs)`, no matter how long it grows. The conformance suite
+re-iterates every operator to prove it. `Once()` is the sole deliberate
+exception, and is the one operator whose state lives outside the closure.
+
+So the question is never "is this pipeline safe to iterate twice?" but
+"what constructor started it?" — a single lookup, answered in the table on
+the `Seq` type.
 
 `Once()` is the development guard — it panics on a second consumption.
 Two operators deserve special awareness: `IsEmpty` consumes one element to

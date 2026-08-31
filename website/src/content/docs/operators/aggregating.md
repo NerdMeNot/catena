@@ -13,7 +13,7 @@ Extremes, totals and joins. Two conventions run through this page: -By returns t
 func (s Seq[T]) MaxBy[K cmp.Ordered](sel func(T) K) (T, bool)
 ```
 
-MaxBy returns the element with the largest key; the earliest maximal element wins ties. NaN keys order below everything (cmp.Compare).
+MaxBy returns the element with the largest key; the earliest maximal element wins ties. NaN keys order below everything (cmp.Compare). MaxOf returns the key itself; catena.Max(s) is the no-selector form.
 
 :::caution
 Full drain
@@ -40,7 +40,7 @@ bob
 func (s Seq[T]) MinBy[K cmp.Ordered](sel func(T) K) (T, bool)
 ```
 
-MinBy returns the element with the smallest key; the earliest minimal element wins ties.
+MinBy returns the element with the smallest key; the earliest minimal element wins ties. MinOf returns the key itself; catena.Min(s) is the no-selector form.
 
 :::caution
 Full drain
@@ -66,7 +66,7 @@ ada
 func (s Seq[T]) MaxOf[K cmp.Ordered](sel func(T) K) (K, bool)
 ```
 
-MaxOf returns the largest key.
+MaxOf returns the largest key — MaxBy returns the element that carries it.
 
 :::caution
 Full drain
@@ -89,7 +89,7 @@ fmt.Println(longest)
 func (s Seq[T]) MinOf[K cmp.Ordered](sel func(T) K) (K, bool)
 ```
 
-MinOf returns the smallest key.
+MinOf returns the smallest key — MinBy returns the element that carries it.
 
 :::caution
 Full drain
@@ -177,7 +177,7 @@ a
 func (s Seq[T]) TopNBy[K cmp.Ordered](n int, sel func(T) K) []T
 ```
 
-TopNBy returns the n elements with the largest keys, sorted descending by key; equal keys retain encounter order and the earliest elements win at the cut. Memory is O(n) — the streaming alternative to SortedByDesc().Take(n). Panics if n is negative.
+TopNBy returns the n elements with the largest keys, sorted descending by key; equal keys retain encounter order and the earliest elements win at the cut. Memory is O(n) — the streaming alternative to SortedByDesc().Take(n). catena.TopN(s, n) is the no-selector form; for the smallest n, use BottomNBy, or BottomNBy(n, catena.Self[T]) with no selector. Panics if n is negative.
 
 :::caution
 Full drain
@@ -303,7 +303,7 @@ fmt.Println(catena.TopN(catena.Of(5, 1, 9, 3), 2))
 func (s Seq[T]) SumOf[N Numeric](sel func(T) N) N
 ```
 
-SumOf sums the selected values; integer overflow wraps like +. Empty input sums to 0.
+SumOf sums the selected values; integer overflow wraps like +. Empty input sums to 0. catena.Sum(s) is the no-selector form.
 
 :::caution
 Full drain

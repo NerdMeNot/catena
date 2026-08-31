@@ -156,7 +156,9 @@ func (s Seq[T]) FilterErr(pred func(T) (bool, error)) Try[T] {
 }
 
 // DistinctBy yields elements whose key has not been seen before; the first
-// occurrence wins. ⚠ Retains one key per distinct value — unbounded.
+// occurrence wins. catena.Distinct(s) is the no-selector form, for a
+// comparable T. On key-sorted input DedupeBy is the O(1)-memory equivalent.
+// ⚠ Retains one key per distinct value — unbounded.
 func (s Seq[T]) DistinctBy[K comparable](sel func(T) K) Seq[T] {
 	return func(yield func(T) bool) {
 		seen := make(map[K]struct{})
@@ -219,7 +221,8 @@ func sortedByKey[T any, K cmp.Ordered](s Seq[T], sel func(T) K, desc bool) Seq[T
 }
 
 // SortedBy yields the elements sorted ascending by key, stably. sel is
-// called exactly once per element (decorate-sort-undecorate). ⚠ Buffers
+// called exactly once per element (decorate-sort-undecorate).
+// catena.Sorted(s) is the no-selector form, for an ordered T. ⚠ Buffers
 // the entire input — hangs on infinite input.
 func (s Seq[T]) SortedBy[K cmp.Ordered](sel func(T) K) Seq[T] {
 	return sortedByKey(s, sel, false)
@@ -234,6 +237,7 @@ func (s Seq[T]) SortedByDesc[K cmp.Ordered](sel func(T) K) Seq[T] {
 
 // JoinBy is a relational inner join: it pairs each element of s with every
 // element of other sharing the same key and yields combine for each pair.
+// It is unrelated to Join and JoinToString, which concatenate strings.
 // Unmatched elements on either side are dropped; duplicate keys produce
 // the cross product per key. Output order is left encounter order, then
 // right encounter order within a key. ⚠ Buffers all of other before the

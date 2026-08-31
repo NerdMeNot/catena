@@ -135,12 +135,33 @@ Binding. A new operation that doesn't fit gets renamed, not exempted.
 | `To-` *(prefix)* | terminal that materialises into a named container | `ToList`, `ToChan`, `ToKeySet` |
 | `-Desc` | descending order; the unsuffixed name is ascending | `SortedDesc`, `SortedByDesc` |
 | `N` *(infix)* | the operation is bounded by a count argument | `TopN`, `TopNBy`, `BottomNBy`, `RepeatN` |
+| `-While` | consumes or generates until a predicate turns false | `TakeWhile`, `DropWhile`, `FoldWhile`, `GenerateWhile` |
+| `-Last` | the same operation anchored at the end | `TakeLast`, `DropLast`, `FindLast` |
+| `-Map` *(fusion suffix)* | fuses a map into the base operation | `FilterMap`, `FlatMap`, `FindMap` |
+| `-All` | the exhaustive variant of a short-circuiting terminal | `CollectAll` |
+| `Is-` / `If-` *(prefix)* | predicate on the sequence / conditional substitution | `IsEmpty`, `IfEmpty` |
+| `Until-` *(prefix)* | bounded by an external signal | `UntilDone` |
+| `Non-` *(prefix)* | excludes a distinguished value | `NonZero` |
+
+**Known exceptions**, recorded rather than hidden — the law is binding for
+new operations, and these predate it or borrow a name whose recognition is
+worth more than the consistency:
+
+- `AssociateWith` takes a value-producing selector, not a comparator, so by
+  the law's own vocabulary it is an `-Of`. The name is Kotlin's
+  `associateWith`, and matching that is worth more than the row.
+- `WithIndex` and `ZipWithNext` use `With` as a prefix meaning "paired
+  with", unrelated to the `-With` suffix's "takes a comparator".
+- `Non-` (`NonZero`) and `-Not` (`FilterNot`) both negate; each is the
+  natural English for its own name.
 
 The `-By` wording is deliberate: "the key that drives the operation," not "elements come out." `MaxBy(sel)` returns the **element** with the largest key; `FoldBy(key, ...)` returns **accumulators** per key; `TallyBy(sel)` returns **counts** per key. What comes out is whatever the base operation produces; the `-By` selector chooses the key it's driven by. The `-By` / `-Of` distinction is the one people get wrong: `MaxBy(sel)` returns the element, `MaxOf(sel)` returns the largest key. Both are wanted often enough to justify both.
 
 `To` reads differently at each end, which is why both rows exist: as a suffix it names the family being crossed into (`MapTo` lands in `Seq`, `JoinToString` in a string), while as a prefix it names the container being built (`ToList`, `ToChan`). Suffix `-To` keeps you in a pipeline; prefix `To-` ends one.
 
 Package-level functions take the unsuffixed name and carry the constraint: `catena.Distinct[T comparable]`, `catena.Max[T cmp.Ordered]`. So `Distinct` is always the direct form and `DistinctBy` is always the selector form, whichever side of the method boundary you're on.
+
+An operation lands at package level for one of **three** reasons, not one: it constrains the element type (`Distinct`, `Sorted`, `Sum`, `Max`, `Union`); it returns `Seq[[]T]`, which as a method is an instantiation cycle (`Chunked`, `ChunkedBy`, `Windowed`, §7.8); or it constrains the receiver's *shape* rather than its element (`Flatten` needs `Seq[Seq[T]]`, `FlattenSlices` needs `Seq[[]T]`, `Unzip` needs a `Seq2`). `Cycle` and `Chain` are neither — they are placed with the constructor and combining families by choice, and would compile as methods.
 
 **Cross-ecosystem collision rule** (new in v2): a `catena` name must not collide with a `slices`/`maps`/`strings` name *unless the semantics are identical*. This is why v1's `Compact` (drop zero values) became `NonZero` — `slices.Compact` means collapse consecutive duplicates, which `catena` calls `Dedupe`. Same name, adjacent ecosystem, different meaning is the worst naming bug available.
 

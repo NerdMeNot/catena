@@ -48,7 +48,7 @@ fmt.Println(catena.SortedDesc(catena.Of(3, 1, 2)).Collect())
 func (s Seq[T]) SortedBy[K cmp.Ordered](sel func(T) K) Seq[T]
 ```
 
-SortedBy yields the elements sorted ascending by key, stably. sel is called exactly once per element (decorate-sort-undecorate).
+SortedBy yields the elements sorted ascending by key, stably. sel is called exactly once per element (decorate-sort-undecorate). catena.Sorted(s) is the no-selector form, for an ordered T.
 
 :::caution
 Buffers the entire input — hangs on infinite input

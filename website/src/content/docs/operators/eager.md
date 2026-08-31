@@ -1,11 +1,13 @@
 ---
 title: "Eager"
-description: "List is a []T carrying the whole Seq operation set, evaluated at once with exact preallocation. Only the List-only methods are listed here: the mirrored operators behave identically to the Seq ones over AsSeq(), which is not a claim but a conformance check, so their entries live on the pages above. Reach for List when the data is small and in memory, when you touch the result more than once, or when you want O(1) access."
+description: "List is a []T carrying the whole Seq method set, evaluated at once with exact preallocation. Only the List-only methods are listed here: the mirrored operators behave identically to the Seq ones over AsSeq(), which is not a claim but a conformance check, so their entries live on the pages above. Reach for List when the data is small and in memory, when you touch the result more than once, or when you want O(1) access."
 sidebar:
   order: 14
 ---
 
-List is a []T carrying the whole Seq operation set, evaluated at once with exact preallocation. Only the List-only methods are listed here: the mirrored operators behave identically to the Seq ones over AsSeq(), which is not a claim but a conformance check, so their entries live on the pages above. Reach for List when the data is small and in memory, when you touch the result more than once, or when you want O(1) access.
+List is a []T carrying the whole Seq *method* set, evaluated at once with exact preallocation. Only the List-only methods are listed here: the mirrored operators behave identically to the Seq ones over AsSeq(), which is not a claim but a conformance check, so their entries live on the pages above. Reach for List when the data is small and in memory, when you touch the result more than once, or when you want O(1) access.
+
+The constraint-bound package functions (`Sorted`, `Sum`, `Max`, `Distinct`, `Contains`, `Union`, `Chunked`, …) are not part of that mirror: they take a `Seq`, so reach them through `AsSeq` and come back with `ToList` — `catena.Sorted(l.AsSeq()).ToList()`. `Concat` likewise takes a `Seq`, so it is `l1.Concat(l2.AsSeq())`. And four mirrored operators cross back to lazy because their `Seq` counterparts do: `WithIndex` and `ZipWithNext` return `Seq2`, `MapErr` and `FilterErr` return `Try`.
 
 ## Len
 

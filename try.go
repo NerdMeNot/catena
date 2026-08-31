@@ -5,19 +5,9 @@ import (
 	"iter"
 )
 
-// Try operators follow five uniform rules (§4.9 of the spec):
-//
-//	R1  Intermediates never inspect errored elements: predicates and map
-//	    functions are not called on them; the element flows through.
-//	R2  The positional intermediates (Take, Drop) count elements, errored
-//	    or not, so Take(n) consumes at most n of the source.
-//	    Ignore().Take(n) is the "n successes" spelling. Count is a
-//	    terminal and follows R5 instead.
-//	R3  An errored element passes through TakeWhile without terminating
-//	    the sequence; only a successful element failing pred ends it.
-//	R4  Operators that generate an error yield (zero, err).
-//	R5  Single-error terminals (Collect, Fold, ForEach, Err, Count) stop
-//	    consuming at the first error.
+// Try operators follow five uniform rules, R1–R5, stated once on the Try
+// type in catena.go and referred to by number throughout this file (§4.9 of
+// the spec).
 //
 // Bodies use direct source invocation, not range — see the note in seq.go.
 

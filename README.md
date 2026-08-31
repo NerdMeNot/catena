@@ -20,6 +20,7 @@ Kotlin-stdlib and LINQ ergonomics on top of `iter.Seq`, built on Go 1.27 generic
 </div>
 
 ```go
+// Order and UserID are your own types; orders is a []Order.
 top := catena.FromSlice(orders).
     Filter(func(o Order) bool { return o.Paid }).
     TopNBy(10, func(o Order) int { return o.Amount })
@@ -35,9 +36,12 @@ byUser := catena.FromSlice(orders).FoldBy(
 go get github.com/NerdMeNot/catena
 ```
 
-Requires **Go 1.27+** for generic methods. No runtime dependencies — the
-one `require` line is a test-only property-testing library, and `go list
--deps` on the package resolves to the standard library alone.
+Requires **Go 1.27+** for generic methods. Adding catena therefore raises
+your module's own `go` directive to 1.27, and everyone building your code
+— teammates and CI included — needs a 1.27 toolchain. No runtime
+dependencies: the one `require` line is a test-only property-testing
+library, and `go list -deps` on the package resolves to the standard
+library alone.
 
 *Catena* is Latin for "chain".
 
@@ -96,9 +100,10 @@ picks the policy — abort, gather, or skip:
 ```go
 nums := catena.FromSlice(lines).MapErr(strconv.Atoi)
 
-vals, err  := nums.Collect()          // stop at the first bad line
-vals, errs := nums.CollectAll()       // keep everything, report everything
-vals       := nums.Ignore().Collect() // skip bad lines
+// pick one:
+vals, err   := nums.Collect()          // stop at the first bad line
+vals, errs  := nums.CollectAll()       // keep everything, report everything
+vals        := nums.Ignore().Collect() // skip bad lines
 ```
 
 Producers that own a resource open it lazily *inside* the pipeline, so an
@@ -152,17 +157,20 @@ you can judge what the nanoseconds buy.
 | `Try[T]` | `iter.Seq2[T, error]`; error policy chosen by the consumer |
 | `List[T]` | eager `[]T` with the mirrored operation set — generated, and conformance-checked to agree with `AsSeq()` |
 
-Interop is free in both directions: `iter.Seq[T](s)`, `s.Seq()`,
-`catena.From(anyPushIterator)`. Operations that constrain the element type
-(`Distinct`, `Sorted`, `Sum`, `Max`, …) are package functions, because a
-method on `Seq[T any]` may require nothing of `T`; the chain continues
-normally after them.
+Interop is one conversion and zero cost, in both directions:
+`slices.Sorted(s.Seq())` to hand a pipeline to the stdlib,
+`catena.From(maps.Keys(m))` to take one back. Operations that constrain the
+element type (`Distinct`, `Sorted`, `Sum`, `Max`, …) are package functions,
+because a method on `Seq[T any]` may require nothing of `T` — so are
+`Chunked`, `ChunkedBy` and `Windowed`, which return `Seq[[]T]` and would be
+an instantiation cycle as methods. The chain continues normally after
+either kind.
 
 ## Documentation
 
-**[Operator reference](docs/operators/)** — all 182 operators across 14
-pages, each with its signature, its memory and termination behaviour, and
-a worked example that `go test` runs and verifies.
+**[Operator reference](docs/operators/README.md)** — all 182 operators
+across 14 pages, each with its signature, its memory and termination
+behaviour, and a worked example that `go test` runs and verifies.
 
 Guides, in reading order:
 

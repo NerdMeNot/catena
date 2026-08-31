@@ -61,7 +61,7 @@ fmt.Println(catena.Of("c").Prepend("a", "b").Collect())
 func Chain[T any](seqs ...Seq[T]) Seq[T]
 ```
 
-Chain yields each sequence's elements in order.
+Chain yields each sequence's elements in order. It is the package-function form of Seq.Concat, for when you hold a slice of sequences and no receiver.
 
 ```go
 // The variadic form, for when the sequences are in a slice already.
@@ -140,7 +140,7 @@ func (s Seq[T]) JoinBy[U any, K comparable, R any](
 ) Seq[R]
 ```
 
-JoinBy is a relational inner join: it pairs each element of s with every element of other sharing the same key and yields combine for each pair. Unmatched elements on either side are dropped; duplicate keys produce the cross product per key. Output order is left encounter order, then right encounter order within a key.
+JoinBy is a relational inner join: it pairs each element of s with every element of other sharing the same key and yields combine for each pair. It is unrelated to Join and JoinToString, which concatenate strings. Unmatched elements on either side are dropped; duplicate keys produce the cross product per key. Output order is left encounter order, then right encounter order within a key.
 
 :::caution
 Buffers all of other before the first emission

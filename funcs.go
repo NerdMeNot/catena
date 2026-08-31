@@ -6,16 +6,20 @@ import (
 	"strings"
 )
 
-// The functions in this file cannot be methods: they constrain the element
-// type (comparable, cmp.Ordered, Numeric), and a method on Seq[T any] may
-// require nothing of T (§7.1 of the spec) — or, for the Flatten family,
-// they constrain the receiver's shape. Every comparable-constrained
-// function panics at runtime if T is an interface type holding a
-// non-comparable value.
-//
 // Bodies use direct source invocation, not range — see the note in seq.go.
 
 // Distinct yields elements not seen before; the first occurrence wins.
+//
+// Distinct is a package function, not a method, and so are the others in this
+// file: they constrain the element type (comparable, cmp.Ordered, Numeric),
+// and a method on Seq[T any] may require nothing of T (§7.1 of the spec) — or,
+// for the Flatten family, they constrain the receiver's shape. Every
+// comparable-constrained function panics at runtime if T is an interface type
+// holding a non-comparable value. The chain continues normally after them:
+// catena.Distinct(s).Filter(f).
+//
+// On input already sorted by the compared value, Dedupe is the O(1)-memory
+// equivalent.
 // ⚠ Retains one entry per distinct value — unbounded.
 func Distinct[T comparable](s Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
@@ -317,7 +321,8 @@ func FlattenSlices[T any](s Seq[[]T]) Seq[T] {
 	return s.FlatMapSlice(Self[[]T])
 }
 
-// Chain yields each sequence's elements in order.
+// Chain yields each sequence's elements in order. It is the package-function
+// form of Seq.Concat, for when you hold a slice of sequences and no receiver.
 func Chain[T any](seqs ...Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
 		stopped := false

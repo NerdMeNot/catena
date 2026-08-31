@@ -13,6 +13,7 @@ import (
 
 // MaxBy returns the element with the largest key; the earliest maximal
 // element wins ties. NaN keys order below everything (cmp.Compare).
+// MaxOf returns the key itself; catena.Max(s) is the no-selector form.
 // ⚠ Full drain.
 func (s Seq[T]) MaxBy[K cmp.Ordered](sel func(T) K) (T, bool) {
 	var best T
@@ -28,7 +29,8 @@ func (s Seq[T]) MaxBy[K cmp.Ordered](sel func(T) K) (T, bool) {
 }
 
 // MinBy returns the element with the smallest key; the earliest minimal
-// element wins ties. ⚠ Full drain.
+// element wins ties. MinOf returns the key itself; catena.Min(s) is the
+// no-selector form. ⚠ Full drain.
 func (s Seq[T]) MinBy[K cmp.Ordered](sel func(T) K) (T, bool) {
 	var best T
 	var bestKey K
@@ -42,7 +44,8 @@ func (s Seq[T]) MinBy[K cmp.Ordered](sel func(T) K) (T, bool) {
 	return best, found
 }
 
-// MaxOf returns the largest key. ⚠ Full drain.
+// MaxOf returns the largest key — MaxBy returns the element that carries
+// it. ⚠ Full drain.
 func (s Seq[T]) MaxOf[K cmp.Ordered](sel func(T) K) (K, bool) {
 	var best K
 	found := false
@@ -55,7 +58,8 @@ func (s Seq[T]) MaxOf[K cmp.Ordered](sel func(T) K) (K, bool) {
 	return best, found
 }
 
-// MinOf returns the smallest key. ⚠ Full drain.
+// MinOf returns the smallest key — MinBy returns the element that carries
+// it. ⚠ Full drain.
 func (s Seq[T]) MinOf[K cmp.Ordered](sel func(T) K) (K, bool) {
 	var best K
 	found := false
@@ -218,7 +222,9 @@ func topNBy[T any, K cmp.Ordered](op string, s Seq[T], n int, sel func(T) K, des
 // TopNBy returns the n elements with the largest keys, sorted descending
 // by key; equal keys retain encounter order and the earliest elements win
 // at the cut. Memory is O(n) — the streaming alternative to
-// SortedByDesc().Take(n). ⚠ Full drain. Panics if n is negative.
+// SortedByDesc().Take(n). catena.TopN(s, n) is the no-selector form; for the
+// smallest n, use BottomNBy, or BottomNBy(n, catena.Self[T]) with no
+// selector. ⚠ Full drain. Panics if n is negative.
 func (s Seq[T]) TopNBy[K cmp.Ordered](n int, sel func(T) K) []T {
 	return topNBy("TopNBy", s, n, sel, true)
 }
@@ -231,7 +237,7 @@ func (s Seq[T]) BottomNBy[K cmp.Ordered](n int, sel func(T) K) []T {
 }
 
 // SumOf sums the selected values; integer overflow wraps like +. Empty
-// input sums to 0. ⚠ Full drain.
+// input sums to 0. catena.Sum(s) is the no-selector form. ⚠ Full drain.
 func (s Seq[T]) SumOf[N Numeric](sel func(T) N) N {
 	var sum N
 	src(s)(func(v T) bool {

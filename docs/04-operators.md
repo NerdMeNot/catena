@@ -4,9 +4,11 @@ Every operator, grouped the way the source is. Full signatures are on
 [pkg.go.dev](https://pkg.go.dev/github.com/NerdMeNot/catena); this page is
 for finding the right operator and knowing its costs at a glance.
 
-Markers: **[S]** carries per-iteration state · **⚠ mem** buffers beyond
-O(1), with its bound · **⚠∞** fully drains — hangs on infinite input ·
-**◐** conditional drain — terminates only when the answer arrives.
+Markers: **⚠ mem** buffers beyond O(1), with its bound · **⚠∞** fully
+drains — hangs on infinite input · **◐** conditional drain — terminates only
+when the answer arrives · **[S]** builds per-iteration state, created fresh
+on each pass and verified re-iterable by the conformance suite — a note, not
+a warning.
 
 ## Constructors
 

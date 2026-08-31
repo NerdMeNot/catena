@@ -2,12 +2,9 @@ package catena
 
 import "iter"
 
-// Seq2 is a bridge back to Seq, not a peer surface (§2.2 of the spec).
-// Deliberately absent, so nobody goes looking:
-//
-//   - ToMap: needs K comparable on the receiver. Use catena.CollectMap.
-//   - Collect: catena.Unzip is the one way to two slices.
-//   - MapKeys: Swap().MapValues(f).Swap() for the rare need; Map otherwise.
+// Seq2 is a bridge back to Seq, not a peer surface (§2.2 of the spec). The
+// operators deliberately absent from it, and what to use instead, are listed
+// on the Seq2 type in catena.go.
 //
 // Bodies use direct source invocation, not range — see the note in seq.go.
 

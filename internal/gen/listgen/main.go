@@ -154,7 +154,7 @@ package catena
 			names = append(names, name)
 			out.WriteString("\n")
 			if body, ok := overrides[name]; ok {
-				fmt.Fprintf(&out, "// %s mirrors Seq.%s eagerly. O(1)/exact-allocation override.\n%s\n", name, name, body)
+				fmt.Fprintf(&out, "// %s mirrors Seq.%s eagerly, implemented directly over the\n// backing slice rather than through the lazy pipeline.\n%s\n", name, name, body)
 				continue
 			}
 			emitDelegation(&out, fset, d)
@@ -292,8 +292,29 @@ func emitDelegation(out *bytes.Buffer, fset *token.FileSet, d *ast.FuncDecl) {
 		body = "\t" + call
 	}
 
-	fmt.Fprintf(out, "// %s mirrors Seq.%s eagerly.\nfunc (l List[T]) %s%s(%s)%s {\n%s\n}\n",
-		name, name, name, typeParams, strings.Join(params, ", "), resultStr, body)
+	fmt.Fprintf(out, "%sfunc (l List[T]) %s%s(%s)%s {\n%s\n}\n",
+		mirrorDoc(name, resultStr), name, typeParams, strings.Join(params, ", "), resultStr, body)
+}
+
+// mirrorDoc is the doc comment for a delegated mirror. Most mirrors consume
+// the list and hand back an eager value, but four of them mirror a Seq
+// operator whose own result is lazy (Seq2 or Try). Saying "eagerly" and
+// nothing else would leave a List user holding a lazy pipeline believing they
+// held a finished value, so those name the crossing.
+func mirrorDoc(name, resultStr string) string {
+	lazy := ""
+	switch {
+	case strings.Contains(resultStr, "Seq2["):
+		lazy = "Seq2"
+	case strings.Contains(resultStr, "Try["):
+		lazy = "Try"
+	}
+	if lazy == "" {
+		return fmt.Sprintf("// %s mirrors Seq.%s eagerly.\n", name, name)
+	}
+	return fmt.Sprintf("// %s mirrors Seq.%s. The list is consumed eagerly, but the\n"+
+		"// result is a lazy %s — one of the four List operators that cross back\n"+
+		"// to lazy (see the List type).\n", name, name, lazy)
 }
 
 // seqInstance reports whether t is Seq[X], returning X.

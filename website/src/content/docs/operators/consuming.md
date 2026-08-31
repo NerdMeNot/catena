@@ -13,7 +13,7 @@ The operators that make a pipeline run. Everything before one of these is a desc
 func (s Seq[T]) Collect() []T
 ```
 
-Collect drains the sequence into a slice; nil for empty.
+Collect drains the sequence into a slice; nil for empty. ToList is the same drain returning a List, which carries the eager operator set.
 
 :::caution
 Full drain
@@ -204,7 +204,7 @@ fmt.Println(count)
 func (s Seq[T]) Once() Seq[T]
 ```
 
-Once returns a sequence that panics if iterated more than once — a development guard for the single-pass contract, not a synchronization mechanism. This is the one operator whose state deliberately lives outside the iteration closure.
+Once returns a sequence that panics if iterated more than once — a development guard for the single-pass contract, not a synchronization mechanism. This is the one operator whose state deliberately lives outside the iteration closure. (catena.Once1 is unrelated: it constructs a one-element sequence.).
 
 ```go
 // A development guard for the single-pass contract: the second

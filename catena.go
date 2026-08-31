@@ -9,10 +9,20 @@
 //     (Collect stops at the first error, CollectAll drains, Ignore skips).
 //   - List[T]: eager []T with the mirrored operation set.
 //
+// Finding an operator: most are methods, but operations that constrain the
+// element type (Distinct, Sorted, Sum, Max, Contains, Union, …) are package
+// functions, because a method on Seq[T any] may require nothing of T. So are
+// Chunked, ChunkedBy and Windowed, which return Seq[[]T] — a method doing
+// that is an instantiation cycle — and the Flatten family, which constrains
+// the receiver's shape. Spelling is catena.Distinct(s), not s.Distinct(); the
+// chain continues normally afterwards, as catena.Distinct(s).Filter(f). If the
+// compiler reports "has no field or method Distinct", this is why.
+//
 // Contracts every caller should know:
 //
 //   - Treat every Seq as single-pass. Re-iterability depends entirely on the
-//     producer (see the constructor table). Once() is a development guard.
+//     producer (see the table on Seq); operators preserve it either way.
+//     Once() is a development guard.
 //   - Nil sequences are empty: every method and package function accepts a
 //     nil receiver or argument and treats it as an empty sequence.
 //   - Invalid construction arguments (negative counts, zero step) panic at
@@ -33,18 +43,71 @@ package catena
 import "iter"
 
 // Seq is a lazy sequence: iter.Seq with methods. Range over it directly.
+//
+// A Seq is a function, so consuming it twice runs its producer twice.
+// Whether that works is a property of the producer alone — operators never
+// change it. Every operator builds its state inside the returned closure, so
+// a chain is re-iterable exactly when its root producer is, and the
+// conformance suite re-iterates every operator to prove it. Once() is the
+// single deliberate exception.
+//
+//	Re-iterable   Of, FromSlice, FromMap, Empty, Empty2, EmptyTry, Once1,
+//	              Repeat, RepeatN, Range, Generate and GenerateWhile (iff
+//	              next is pure)
+//	Single-use    FromChan, and From, From2, FromErrs when the underlying
+//	              source is (anything over I/O)
+//	Cycle         re-iterable iff its source's first pass is
+//
+// Consuming a single-use sequence a second time yields nothing rather than
+// failing: wrap it in Once() during development to turn that into a panic.
+// Printing a Seq shows a function pointer — print s.Collect() instead.
 type Seq[T any] iter.Seq[T]
 
 // Seq2 is a lazy pair sequence: iter.Seq2 with methods. It is a bridge back
 // to Seq (via Keys, Values, MapTo), deliberately not a full peer surface.
+//
+// Deliberately absent, so nobody goes looking:
+//
+//   - ToMap: needs K comparable on the receiver. Use catena.CollectMap.
+//   - Collect: catena.Unzip is the one way to two slices.
+//   - MapKeys: Swap().MapValues(f).Swap() for the rare need; Map otherwise.
 type Seq2[K, V any] iter.Seq2[K, V]
 
 // Try is a lazy sequence of fallible elements: iter.Seq2[T, error] with
 // methods. When err != nil the value must not be read.
+//
+// Try carries a small operator set on purpose — it is not a second Seq. The
+// intended shape is to stay in Try only while errors are still in play, then
+// commit to a policy (Ignore, Must, Collect, CollectAll) and continue on Seq
+// with the full API. Wanting Sorted or GroupBy on a Try means the errors have
+// been carried one stage too far.
+//
+// Its operators follow five uniform rules, referred to below as R1–R5:
+//
+//	R1  Intermediates never inspect errored elements: predicates and map
+//	    functions are not called on them; the element flows through.
+//	R2  The positional intermediates (Take, Drop) count elements, errored
+//	    or not, so Take(n) consumes at most n of the source.
+//	    Ignore().Take(n) is the "n successes" spelling. Count is a
+//	    terminal and follows R5 instead.
+//	R3  An errored element passes through TakeWhile without terminating
+//	    the sequence; only a successful element failing pred ends it.
+//	R4  Operators that generate an error yield (zero, err).
+//	R5  Single-error terminals (Collect, Fold, ForEach, Err, Count) stop
+//	    consuming at the first error.
 type Try[T any] iter.Seq2[T, error]
 
-// List is an eager []T with the mirrored operation set. []T(l) unwraps it
-// with no copy.
+// List is an eager []T with the mirrored method set. []T(l) unwraps it with
+// no copy, and AsSeq() views it lazily for free.
+//
+// The mirror covers Seq's methods, not the constraint-bound package
+// functions: those take a Seq, so reach them through AsSeq and come back with
+// ToList, as catena.Sorted(l.AsSeq()).ToList(). Concat likewise takes a Seq,
+// so it is l1.Concat(l2.AsSeq()).
+//
+// Four mirrored operators cross back to lazy, because their Seq counterparts
+// return a lazy type: WithIndex and ZipWithNext return Seq2, MapErr and
+// FilterErr return Try.
 type List[T any] []T
 
 // Numeric is the constraint for arithmetic aggregations (Sum, Product,

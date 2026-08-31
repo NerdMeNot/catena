@@ -94,7 +94,8 @@ func (l List[T]) DistinctWith(eq func(a, b T) bool) List[T] {
 	return List[T](FromSlice([]T(l)).DistinctWith(eq).Collect())
 }
 
-// Reversed mirrors Seq.Reversed eagerly. O(1)/exact-allocation override.
+// Reversed mirrors Seq.Reversed eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) Reversed() List[T] {
 	if len(l) == 0 {
 		return nil
@@ -106,7 +107,8 @@ func (l List[T]) Reversed() List[T] {
 	return List[T](out)
 }
 
-// Map mirrors Seq.Map eagerly. O(1)/exact-allocation override.
+// Map mirrors Seq.Map eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) Map[U any](f func(T) U) List[U] {
 	if len(l) == 0 {
 		return nil
@@ -118,7 +120,8 @@ func (l List[T]) Map[U any](f func(T) U) List[U] {
 	return List[U](out)
 }
 
-// MapIndexed mirrors Seq.MapIndexed eagerly. O(1)/exact-allocation override.
+// MapIndexed mirrors Seq.MapIndexed eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) MapIndexed[U any](f func(int, T) U) List[U] {
 	if len(l) == 0 {
 		return nil
@@ -150,22 +153,30 @@ func (l List[T]) Scan[A any](init A, f func(A, T) A) List[A] {
 	return List[A](FromSlice([]T(l)).Scan(init, f).Collect())
 }
 
-// WithIndex mirrors Seq.WithIndex eagerly.
+// WithIndex mirrors Seq.WithIndex. The list is consumed eagerly, but the
+// result is a lazy Seq2 — one of the four List operators that cross back
+// to lazy (see the List type).
 func (l List[T]) WithIndex() Seq2[int, T] {
 	return FromSlice([]T(l)).WithIndex()
 }
 
-// ZipWithNext mirrors Seq.ZipWithNext eagerly.
+// ZipWithNext mirrors Seq.ZipWithNext. The list is consumed eagerly, but the
+// result is a lazy Seq2 — one of the four List operators that cross back
+// to lazy (see the List type).
 func (l List[T]) ZipWithNext() Seq2[T, T] {
 	return FromSlice([]T(l)).ZipWithNext()
 }
 
-// MapErr mirrors Seq.MapErr eagerly.
+// MapErr mirrors Seq.MapErr. The list is consumed eagerly, but the
+// result is a lazy Try — one of the four List operators that cross back
+// to lazy (see the List type).
 func (l List[T]) MapErr[U any](f func(T) (U, error)) Try[U] {
 	return FromSlice([]T(l)).MapErr(f)
 }
 
-// FilterErr mirrors Seq.FilterErr eagerly.
+// FilterErr mirrors Seq.FilterErr. The list is consumed eagerly, but the
+// result is a lazy Try — one of the four List operators that cross back
+// to lazy (see the List type).
 func (l List[T]) FilterErr(pred func(T) (bool, error)) Try[T] {
 	return FromSlice([]T(l)).FilterErr(pred)
 }
@@ -195,7 +206,8 @@ func (l List[T]) JoinBy[U any, K comparable, R any](other Seq[U], leftKey func(T
 	return List[R](FromSlice([]T(l)).JoinBy(other, leftKey, rightKey, combine).Collect())
 }
 
-// Collect mirrors Seq.Collect eagerly. O(1)/exact-allocation override.
+// Collect mirrors Seq.Collect eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) Collect() []T {
 	if len(l) == 0 {
 		return nil
@@ -203,7 +215,8 @@ func (l List[T]) Collect() []T {
 	return append([]T(nil), l...)
 }
 
-// ToList mirrors Seq.ToList eagerly. O(1)/exact-allocation override.
+// ToList mirrors Seq.ToList eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) ToList() List[T] {
 	return l.Clone()
 }
@@ -228,7 +241,8 @@ func (l List[T]) Drain() {
 	FromSlice([]T(l)).Drain()
 }
 
-// First mirrors Seq.First eagerly. O(1)/exact-allocation override.
+// First mirrors Seq.First eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) First() (T, bool) {
 	if len(l) == 0 {
 		var zero T
@@ -237,7 +251,8 @@ func (l List[T]) First() (T, bool) {
 	return l[0], true
 }
 
-// Last mirrors Seq.Last eagerly. O(1)/exact-allocation override.
+// Last mirrors Seq.Last eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) Last() (T, bool) {
 	if len(l) == 0 {
 		var zero T
@@ -251,7 +266,8 @@ func (l List[T]) Single() (T, bool) {
 	return FromSlice([]T(l)).Single()
 }
 
-// ElementAt mirrors Seq.ElementAt eagerly. O(1)/exact-allocation override.
+// ElementAt mirrors Seq.ElementAt eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) ElementAt(i int) (T, bool) {
 	return l.Get(i)
 }
@@ -291,7 +307,8 @@ func (l List[T]) None(pred func(T) bool) bool {
 	return FromSlice([]T(l)).None(pred)
 }
 
-// Count mirrors Seq.Count eagerly. O(1)/exact-allocation override.
+// Count mirrors Seq.Count eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) Count() int {
 	return len(l)
 }
@@ -301,7 +318,8 @@ func (l List[T]) CountWhere(pred func(T) bool) int {
 	return FromSlice([]T(l)).CountWhere(pred)
 }
 
-// IsEmpty mirrors Seq.IsEmpty eagerly. O(1)/exact-allocation override.
+// IsEmpty mirrors Seq.IsEmpty eagerly, implemented directly over the
+// backing slice rather than through the lazy pipeline.
 func (l List[T]) IsEmpty() bool {
 	return len(l) == 0
 }

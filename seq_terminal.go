@@ -13,7 +13,9 @@ import (
 	"iter"
 )
 
-// Collect drains the sequence into a slice; nil for empty. ⚠ Full drain.
+// Collect drains the sequence into a slice; nil for empty. ToList is the
+// same drain returning a List, which carries the eager operator set.
+// ⚠ Full drain.
 func (s Seq[T]) Collect() []T {
 	var out []T
 	src(s)(func(v T) bool {

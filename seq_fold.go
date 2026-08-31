@@ -1,12 +1,11 @@
 package catena
 
-// The fold family and its keyed cousins. FoldBy is the operator that
-// justifies the library: streaming per-key aggregation, memory bounded by
-// distinct keys rather than elements — GroupBy retains everything, FoldBy
-// retains one accumulator per key.
+// The fold family and its keyed cousins.
 
-// Fold reduces the sequence into an accumulator, left to right. ⚠ Full
-// drain.
+// Fold reduces the sequence into an accumulator, left to right.
+//
+// Reduce is the same operation using the first element as the initial
+// accumulator; FoldBy folds per key in one streaming pass. ⚠ Full drain.
 func (s Seq[T]) Fold[A any](init A, f func(A, T) A) A {
 	acc := init
 	src(s)(func(v T) bool {

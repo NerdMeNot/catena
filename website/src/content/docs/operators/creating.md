@@ -85,7 +85,7 @@ map[ada:36]
 func From2[K, V any](seq func(func(K, V) bool)) Seq2[K, V]
 ```
 
-From2 adapts any push-function pair sequence.
+From2 adapts any push-function pair sequence. Re-iterable iff the underlying source is.
 
 ```go
 pairs := catena.From2(func(yield func(string, int) bool) {
@@ -107,7 +107,7 @@ fmt.Println(pairs.MapTo(func(k string, v int) string {
 func FromErrs[T any](seq func(func(T, error) bool)) Try[T]
 ```
 
-FromErrs adapts any push-function fallible sequence.
+FromErrs adapts any push-function fallible sequence. Re-iterable iff the underlying source is.
 
 ```go
 rows := catena.FromErrs(func(yield func(int, error) bool) {
@@ -152,7 +152,7 @@ fmt.Println(catena.FromChan(context.Background(), ch).Collect())
 func Empty[T any]() Seq[T]
 ```
 
-Empty returns the empty Seq.
+Empty returns the empty Seq. Re-iterable.
 
 ```go
 fmt.Println(catena.Empty[int]().Collect(), catena.Empty[int]().Count())
@@ -168,7 +168,7 @@ fmt.Println(catena.Empty[int]().Collect(), catena.Empty[int]().Count())
 func Empty2[K, V any]() Seq2[K, V]
 ```
 
-Empty2 returns the empty Seq2.
+Empty2 returns the empty Seq2. Re-iterable.
 
 ```go
 fmt.Println(catena.Empty2[string, int]().Count())
@@ -184,7 +184,7 @@ fmt.Println(catena.Empty2[string, int]().Count())
 func EmptyTry[T any]() Try[T]
 ```
 
-EmptyTry returns the empty Try.
+EmptyTry returns the empty Try. Re-iterable.
 
 ```go
 vals, err := catena.EmptyTry[int]().Collect()
@@ -218,7 +218,7 @@ fmt.Println(catena.Once1("only").Collect())
 func Repeat[T any](v T) Seq[T]
 ```
 
-Repeat yields v forever. Infinite: pair with Take or a conditional terminal.
+Repeat yields v forever. Re-iterable. Infinite: pair with Take or a conditional terminal.
 
 ```go
 // Infinite, so it must be bounded by something downstream.
@@ -235,7 +235,7 @@ fmt.Println(catena.Repeat("ha").Take(3).Collect())
 func RepeatN[T any](v T, n int) Seq[T]
 ```
 
-RepeatN yields v exactly n times. Panics if n is negative.
+RepeatN yields v exactly n times. Re-iterable. Panics if n is negative.
 
 ```go
 fmt.Println(catena.RepeatN(0, 4).Collect())
@@ -270,7 +270,7 @@ fmt.Println(catena.Generate(1, func(n int) int { return n * 3 }).
 func GenerateWhile[T any](seed T, next func(T) (T, bool)) Seq[T]
 ```
 
-GenerateWhile yields seed unconditionally, then successive next values until next reports false.
+GenerateWhile yields seed unconditionally, then successive next values until next reports false. Re-iterable iff next is pure.
 
 ```go
 // The seed is yielded unconditionally; a value produced alongside
@@ -290,7 +290,7 @@ fmt.Println(catena.GenerateWhile(1, func(n int) (int, bool) {
 func Range[I Integer](start, stop, step I) Seq[I]
 ```
 
-Range yields start, start+step, ... while the value is before stop (exclusive). step == 0 panics at construction; a sign mismatch between step and the start→stop direction yields an empty sequence. Termination is overflow-guarded: a step past the type's edge stops rather than wrapping. Unsigned types cannot step downward.
+Range yields start, start+step, ... while the value is before stop (exclusive). Re-iterable. step == 0 panics at construction; a sign mismatch between step and the start→stop direction yields an empty sequence. Termination is overflow-guarded: a step past the type's edge stops rather than wrapping. Unsigned types cannot step downward.
 
 ```go
 // Half-open, like a slice expression. A sign mismatch between step
@@ -316,7 +316,7 @@ func Cycle[T any](s Seq[T]) Seq[T]
 Cycle yields s over and over, forever. An empty s yields an empty Cycle — it terminates rather than spinning.
 
 :::caution
-The first pass is buffered and replayed (⚠ unbounded memory in len(s))
+The first pass is buffered and replayed (⚠ unbounded memory in len(s)), so Cycle is re-iterable iff that first pass of s is
 :::
 
 ```go

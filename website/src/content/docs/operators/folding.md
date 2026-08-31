@@ -13,7 +13,7 @@ Reducing a sequence to one value, or to one value per key. FoldBy is the operato
 func (s Seq[T]) Fold[A any](init A, f func(A, T) A) A
 ```
 
-Fold reduces the sequence into an accumulator, left to right.
+Fold reduces the sequence into an accumulator, left to right. Reduce is the same operation using the first element as the initial accumulator; FoldBy folds per key in one streaming pass.
 
 :::caution
 Full drain

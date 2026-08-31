@@ -241,17 +241,34 @@ var families = []family{
 		Order: 14,
 		Slug:  "eager",
 		Title: "Eager",
-		Summary: "List is a []T carrying the whole Seq operation set, evaluated at " +
+		Summary: "List is a []T carrying the whole Seq *method* set, evaluated at " +
 			"once with exact preallocation. Only the List-only methods are listed here: " +
 			"the mirrored operators behave identically to the Seq ones over AsSeq(), " +
 			"which is not a claim but a conformance check, so their entries live on the " +
 			"pages above. Reach for List when the data is small and in memory, when you " +
-			"touch the result more than once, or when you want O(1) access.",
+			"touch the result more than once, or when you want O(1) access.\n\n" +
+			"The constraint-bound package functions (`Sorted`, `Sum`, `Max`, `Distinct`, " +
+			"`Contains`, `Union`, `Chunked`, …) are not part of that mirror: they take a " +
+			"`Seq`, so reach them through `AsSeq` and come back with `ToList` — " +
+			"`catena.Sorted(l.AsSeq()).ToList()`. `Concat` likewise takes a `Seq`, so it " +
+			"is `l1.Concat(l2.AsSeq())`. And four mirrored operators cross back to lazy " +
+			"because their `Seq` counterparts do: `WithIndex` and `ZipWithNext` return " +
+			"`Seq2`, `MapErr` and `FilterErr` return `Try`.",
 		Members: []string{
 			"List.Len", "List.At", "List.Get", "List.Slice", "List.Clone",
 			"List.AsSeq", "List.FoldRight", "List.Append",
 		},
 	},
+}
+
+// firstSentence trims a family summary to its opening sentence, for the
+// one-line-per-family index. Summaries are prose and some run several
+// sentences; the index wants only the first.
+func firstSentence(s string) string {
+	if i := strings.Index(s, ". "); i >= 0 {
+		return s[:i]
+	}
+	return strings.TrimSuffix(s, ".")
 }
 
 // Usage: opdocs [srcDir] [outDir]
@@ -283,6 +300,15 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// The directory is linked to directly from the README and docs index,
+	// where GitHub renders a bare file listing unless an index exists.
+	var index strings.Builder
+	index.WriteString("# Operator reference\n\n" +
+		"Every operator, with its signature, its memory and termination\n" +
+		"behaviour, and a worked example that `go test` runs and verifies.\n" +
+		"For the one-line-per-operator index with costs at a glance, see\n" +
+		"[the catalog](../04-operators.md).\n\n")
+
 	documented := map[string]bool{}
 	written := 0
 	for _, f := range families {
@@ -291,6 +317,7 @@ func main() {
 			log.Fatalf("%s: %v", f.Slug, err)
 		}
 		name := fmt.Sprintf("%02d-%s.md", f.Order, f.Slug)
+		fmt.Fprintf(&index, "%d. [%s](%s) — %s\n", f.Order, f.Title, name, firstSentence(f.Summary))
 		if err := os.WriteFile(filepath.Join(outDir, name), []byte(page), 0o644); err != nil {
 			log.Fatal(err)
 		}
@@ -322,6 +349,10 @@ func main() {
 		sort.Strings(missing)
 		log.Fatalf("these exported operators are in no family, so they would ship undocumented: %s",
 			strings.Join(missing, ", "))
+	}
+
+	if err := os.WriteFile(filepath.Join(outDir, "README.md"), []byte(index.String()), 0o644); err != nil {
+		log.Fatal(err)
 	}
 
 	fmt.Printf("opdocs: %d families, %d operators\n", len(families), written)
