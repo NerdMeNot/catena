@@ -2,4 +2,4 @@ package catena
 
 // Version is the library's version, kept in lockstep with release tags:
 // the release workflow refuses to publish a tag that disagrees with it.
-const Version = "1.3.0"
+const Version = "1.4.0-dev"
