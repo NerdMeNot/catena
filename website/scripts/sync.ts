@@ -97,12 +97,12 @@ function frontmatter(fields: Record<string, string | number | undefined>): strin
 
 const repoUrl = 'https://github.com/NerdMeNot/catena'
 
-// Where the site is actually served from. The canonical URL and the
-// sitemap are built from this, so it has to name a host that resolves —
-// pointing them at a domain that is not connected yet tells search
-// engines the real pages live somewhere unreachable. Change it here, in
-// one place, if the site moves to a custom domain.
-const siteUrl = 'https://catena-docs.pages.dev'
+// Where the site is actually served from. The canonical URL, the sitemap
+// and the og:image are built from this, so it has to name the host people
+// are sent to: the site answers on both the custom domain and the Pages
+// subdomain, and naming the wrong one makes the branded domain the
+// duplicate rather than the original. Change it here, in one place.
+const siteUrl = 'https://catena.nerdmenot.in'
 
 // The release that froze the v1 API. Pinned rather than derived from the
 // documented version: later v1 releases inherit that promise, they do not

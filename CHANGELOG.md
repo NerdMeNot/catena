@@ -4,7 +4,63 @@ All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
 
-## [Unreleased]
+## [1.3.0] — 2026-08-31
+
+Documentation and site only — no change to the library's API or behaviour.
+The headline is that the docs are now versioned: a reader pinned to an
+older release can read that release's documentation instead of the current
+one silently replacing it.
+
+### Added
+
+- **Versioned documentation.** The site serves the current release at the
+  root and archived releases under their own prefix, with a switcher in
+  the header. `v1.1.0` is archived at `/1-1/`, and its pages carry a notice
+  saying so. The snapshot is taken from the tag rather than the working
+  tree — the versioning plugin archives whatever is currently checked out,
+  which would have filed the newer API under the older version's name.
+- A 1280×640 social preview card, wired as `og:image` and `twitter:image`
+  across every page. Links to the site previously unfurled with no image
+  at all. The same file is the repository's GitHub social preview, which
+  has no API and is uploaded by hand.
+
+### Changed
+
+- The documentation site is now published from released tags only. Its
+  content is derived from the tree it is built from while its version
+  label comes from the newest release, so publishing `main` put the two in
+  disagreement the moment anything landed unreleased — the site briefly
+  documented `BottomN` while announcing itself as v1.1.0, which does not
+  have it. A push to `main` now builds the site and runs every check
+  against it without deploying. A site-only change can still be published
+  from a branch, guarded by a check that refuses unless `docs/operators/`
+  matches the latest release tag.
+- Canonical URLs, the sitemap and the `og:image` now name
+  `catena.nerdmenot.in`. The site answers on both that and its Pages
+  subdomain, and naming the subdomain made the branded domain the
+  duplicate.
+- The version switcher is the site's own component rather than the
+  plugin's native `<select>`, whose option list is drawn by the operating
+  system and takes none of the site's type or colour. Versions are links,
+  so one can be opened in a new tab.
+- `API` and `GitHub` in the top navigation open in a new tab, on the
+  landing page and in the docs header.
+- The README links the documentation site, which it never had.
+
+### Fixed
+
+- The theme toggle lost its selected state on documentation pages. It
+  renders twice there — the header and the mobile menu — and both named
+  their radios `catena-theme`; radios sharing a name form one group however
+  far apart they sit, so the browser kept only the last checked one.
+- Switcher links pointed at pages that need not exist in every version.
+  The 404 page's switcher offered `/404/` and `/1-1/404/`, neither a
+  route. Links now fall back to a version's front page where the same page
+  is absent, and `/1-1/` itself is a page rather than a 404.
+- `scripts/sync.ts` cleared all of `src/content/docs/` on every run, which
+  would have destroyed the archived versions permanently — nothing can
+  regenerate a snapshot of a tree that no longer exists. It now clears only
+  the directories it generates.
 
 ### Removed
 
@@ -118,5 +174,6 @@ it is retracted in `go.mod` and should not be used. Start here.
   `range`, which makes a 4-stage pipeline 25% faster than the same
   pipeline hand-built from raw closures.
 
+[1.3.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.3.0
 [1.2.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.2.0
 [1.1.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.1.0

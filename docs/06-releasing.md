@@ -53,7 +53,9 @@ a deploy always publishes what was reviewed rather than something
 generated unseen.
 
 The `Docs` workflow publishes it to the Cloudflare Pages project
-`catena-docs`, live at <https://catena-docs.pages.dev>.
+`catena-docs`, live at <https://catena.nerdmenot.in> (the project also
+answers on its `catena-docs.pages.dev` subdomain, but the custom domain is
+the canonical one — see `siteUrl` in `website/scripts/sync.ts`).
 
 **Only a released tag is ever deployed.** The site names the version it
 documents, and its content is derived from the tree it was built from, so

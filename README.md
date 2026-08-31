@@ -168,6 +168,9 @@ either kind.
 
 ## Documentation
 
+**[catena.nerdmenot.in](https://catena.nerdmenot.in)** — the documentation
+site: every guide and the full operator reference, versioned per release.
+
 **[Operator reference](docs/operators/README.md)** — all 183 operators
 across 14 pages, each with its signature, its memory and termination
 behaviour, and a worked example that `go test` runs and verifies.

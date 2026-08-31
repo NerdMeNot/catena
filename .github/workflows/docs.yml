@@ -1,5 +1,5 @@
 # Builds and deploys the documentation site (website/ -> the catena-docs
-# Cloudflare Pages project, https://catena-docs.pages.dev).
+# Cloudflare Pages project, served at https://catena.nerdmenot.in).
 #
 # ## What gets published, and when
 #
