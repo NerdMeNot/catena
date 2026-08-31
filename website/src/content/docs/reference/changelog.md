@@ -7,7 +7,13 @@ All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
 
-## [Unreleased]
+## [1.2.0] — 2026-08-31
+
+One new operator and a substantial documentation pass. The pass came out of
+an ergonomics and cognitive-load audit whose finding was that the library's
+most useful facts were written down where godoc discards them — so nothing
+about the API changed, but a good deal more of it is now visible from the
+place people read.
 
 ### Added
 
@@ -103,4 +109,5 @@ it is retracted in `go.mod` and should not be used. Start here.
   `range`, which makes a 4-stage pipeline 25% faster than the same
   pipeline hand-built from raw closures.
 
+[1.2.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.2.0
 [1.1.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.1.0

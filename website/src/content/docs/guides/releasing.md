@@ -20,8 +20,8 @@ Between releases, `Version` carries a `-dev` suffix; a release drops it.
 3. Tag and push:
 
    ```sh
-   git tag -a v1.1.0 -m "catena v1.1.0"
-   git push origin v1.1.0
+   git tag -a v1.2.0 -m "catena v1.2.0"
+   git push origin v1.2.0
    ```
 
 4. After the release publishes, bump `Version` back to the next
@@ -115,7 +115,7 @@ release you have would mean the site had no current one.
 
 ## Versioning policy
 
-Semantic versioning. `v1.1.0` is the first supported release and freezes
-the API; anything removed or changed incompatibly waits for a major
+Semantic versioning. `v1.2.0` is the current release. `v1.1.0` was the
+first supported one and froze the API; anything removed or changed incompatibly waits for a major
 version that nobody is in a hurry to have. Earlier tags were withdrawn and
 are retracted in `go.mod`.

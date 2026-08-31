@@ -1,11 +1,11 @@
 ---
 title: "Versioning"
-description: "These docs describe catena v1.1.0. What the version guarantees, how to pin it, and how the docs track releases."
+description: "These docs describe catena v1.2.0. What the version guarantees, how to pin it, and how the docs track releases."
 ---
 
 ## What these docs describe
 
-**This site documents catena v1.1.0** — the version shown in the header,
+**This site documents catena v1.2.0** — the version shown in the header,
 and the one `go get github.com/NerdMeNot/catena` resolves to. That number is read from
 the library's own `Version` constant when the site is built, so the docs
 and the code cannot disagree about which release is being described; CI
@@ -27,7 +27,7 @@ Anything that would break a working program waits for v2.
 ## Pinning
 
 ```sh
-go get github.com/NerdMeNot/catena@v1.1.0
+go get github.com/NerdMeNot/catena@v1.2.0
 ```
 
 Go modules pin by default — your `go.mod` records the exact version and
@@ -45,7 +45,7 @@ select one. Use v1.1.0 or later.
 
 Today catena has one released version, so this site documents it directly
 and needs no version switcher. When a second release exists, the previous
-one is archived at `/1-1/…` and a
+one is archived at `/1-2/…` and a
 version selector appears in the header
 — the machinery ([starlight-versions](https://starlight-versions.vercel.app))
 is already a dependency, and the procedure is written down in the

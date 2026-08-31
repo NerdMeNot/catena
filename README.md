@@ -186,9 +186,11 @@ Also: [runnable examples](examples/) · [API reference](https://pkg.go.dev/githu
 
 ## Status
 
-**`v1.1.0`** is the first supported release, and it freezes the API:
-anything removed or changed incompatibly waits for a major version.
-Earlier tags were withdrawn and are retracted in [go.mod](go.mod) — don't
-use them. Changes are tracked in [CHANGELOG.md](CHANGELOG.md).
+**`v1.2.0`** is the current release. `v1.1.0` was the first supported one
+and froze the API: within v1, operators keep their names, signatures and
+documented behaviour, and anything removed or changed incompatibly waits
+for a major version. Earlier tags were withdrawn and are retracted in
+[go.mod](go.mod) — don't use them. Changes are tracked in
+[CHANGELOG.md](CHANGELOG.md).
 
 Licensed under [Apache-2.0](LICENSE).
