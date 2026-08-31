@@ -88,9 +88,9 @@ generated content says.
 ### Versioning the website
 
 The site serves the current release at the root and each archived series
-under its own prefix, with a switcher in the header. The `v1.2.x` series is
-archived at `/1-2/` and `v1.1.x` at `/1-1/`; their pages carry a notice
-saying so and linking to the current one.
+under its own prefix, with a switcher in the header. The `v1.3.x`, `v1.2.x`
+and `v1.1.x` series are archived at `/1-3/`, `/1-2/` and `/1-1/`; their
+pages carry a notice saying so and linking to the current one.
 
 **One archive per minor series, not per tag.** Three reasons:
 

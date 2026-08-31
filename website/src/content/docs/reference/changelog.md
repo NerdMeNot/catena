@@ -7,7 +7,10 @@ All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
 
-## [Unreleased]
+## [1.4.0] — 2026-09-01
+
+A performance release with no API change: the terminals that gather a
+slice stopped recopying what they had already gathered.
 
 ### Changed
 
@@ -43,6 +46,11 @@ All notable changes to catena are documented here. The format follows
   because that path shares the gathering change above. `List.Map` versus
   `Seq` map-and-collect moves from 7× to 6× for the same reason — the
   thing it is compared against got faster.
+
+### Documentation
+
+- The `v1.3.x` series is archived at `/1-3/`, per the rule that a minor
+  series is snapshotted when the next minor ships.
 
 ## [1.3.0] — 2026-08-31
 
@@ -214,6 +222,7 @@ it is retracted in `go.mod` and should not be used. Start here.
   `range`, which makes a 4-stage pipeline 25% faster than the same
   pipeline hand-built from raw closures.
 
+[1.4.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.4.0
 [1.3.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.3.0
 [1.2.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.2.0
 [1.1.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.1.0

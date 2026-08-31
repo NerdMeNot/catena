@@ -92,43 +92,12 @@ generated content says.
 
 ### Versioning the website
 
-The site serves the current release at the root and each archived series
-under its own prefix, with a switcher in the header. The `v1.3.x`, `v1.2.x`
-and `v1.1.x` series are archived at `/1-3/`, `/1-2/` and `/1-1/`; their
-pages carry a notice saying so and linking to the current one.
+The site serves the current release at the root and every archived release
+under its own prefix, with a switcher in the header. `v1.1.0` is archived
+at `/1-1/`, and its pages carry a notice saying so and linking to the
+current one.
 
-**One archive per minor series, not per tag.** Three reasons:
-
-- pkg.go.dev already archives every tag's API — signatures and doc
-  comments at any exact version, for free. What this site adds is the
-  prose, and that does not change between patches.
-- Under semantic versioning a patch cannot change the API, so a patch's
-  operator reference is its minor's. Archiving patches would publish
-  near-duplicates.
-- A published URL is permanent. Once `/1-2/` exists and someone links it,
-  removing it breaks their link — so archive at the coarsest granularity
-  that is still useful, because adding is cheap and removing is not.
-
-Which gives the rule:
-
-- Archive a minor series when the **next minor** ships, snapshotting the
-  last tag in the outgoing series. Label it for the series (`v1.2.x`), not
-  for that tag.
-- A patch release archives nothing: it *is* the current release, so it
-  refreshes the current docs.
-- **Never archive a retracted version.** `v1.0.0` and `v0.1.0`–`v0.3.0`
-  are retracted in `go.mod`; a switcher entry for a version `go get`
-  refuses to select is worse than no entry.
-- Past about six entries the control stops being usable. Drop the oldest
-  from the switcher then, but leave their pages served so existing links
-  keep working.
-
-Do not skip a series because it changed little. `v1.2.0` was left out on
-that reasoning and the switcher jumped from `v1.3.0` to `v1.1.x`, which
-reads as a fault — the reader cannot see the reasoning, only the gap. It
-also turned out to be wrong: that series added `BottomN`.
-
-To archive a series when you cut the next minor:
+To archive a release when you cut the next one:
 
 1. **Take the snapshot from the tag, not from the working tree.** The
    plugin will happily snapshot whatever is currently in
@@ -149,7 +118,7 @@ To archive a series when you cut the next minor:
 3. **List it** in `astro.config.mjs`, newest first:
 
    ```js
-   versions: [{ slug: '1-2', label: 'v1.2.x' }, { slug: '1-1', label: 'v1.1.x' }]
+   versions: [{ slug: '1-2', label: 'v1.2.0' }, { slug: '1-1', label: 'v1.1.0' }]
    ```
 
 4. Build once and check the archived page shows the outdated-version

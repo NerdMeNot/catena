@@ -59,6 +59,7 @@ export default defineConfig({
           // never listed; offering docs for a version `go get` refuses to
           // select would be worse than offering none.
           versions: [
+            { slug: '1-3', label: 'v1.3.x' },
             { slug: '1-2', label: 'v1.2.x' },
             { slug: '1-1', label: 'v1.1.x' },
           ],

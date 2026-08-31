@@ -1,53 +1,11 @@
-# Changelog
+---
+title: "Changelog"
+description: "Every released version of catena and what changed in it."
+---
 
 All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
-
-## [1.4.0] — 2026-09-01
-
-A performance release with no API change: the terminals that gather a
-slice stopped recopying what they had already gathered.
-
-### Changed
-
-- The gathering terminals no longer grow a slice with `append`. Its curve
-  is the wrong shape at size: past 256 elements Go grows a slice by about
-  a quarter, and every step reallocates *and* recopies everything gathered
-  so far, so collecting 100k elements allocated 4.1 MB to produce 800 KB
-  across 32 reallocations. Elements now go into fixed blocks that are
-  never resized, then into one exact-sized slice.
-
-  Measured against v1.3.0, interleaved over 18 samples a side to cancel
-  drift: **`Collect` is 14% faster and allocates 59% less** (3.91 MiB →
-  1.60 MiB), and the buffer behind `Sorted*` the same 59% less, at 3%
-  faster. Three more allocation *events*, 2.3 MB fewer bytes. Nothing else
-  in the suite moved. The returned slice also has exact capacity now,
-  where `append` left up to 25% slack for the caller to retain.
-
-  Applies to `Collect`, `ToList`, `Partition`, `Unzip`, `Try.Collect`,
-  `Try.CollectAll`, the `Sorted*` buffer and `Cycle`'s replay buffer. No
-  API change, and no behaviour change beyond the capacity of the returned
-  slice.
-
-### Fixed
-
-- `docs/05-performance.md` showed a hand-written clone-and-sort but quoted
-  numbers measured from `SortedDesc(s).Take(10)` — catena's own sort path,
-  which pays for the pipeline too. Against the code actually printed,
-  `TopNBy` is 12× faster and 803 KB → 1 KB; against the catena spelling it
-  is 32× faster and 1.7 MB → 1 KB. Both are now stated, and both are
-  measured: `BenchmarkSortedTakeN_Hand` is new so the printed code is
-  covered by a benchmark rather than borrowing one.
-- The `SortedDesc(s).Take(10)` memory figure was 4.1 MB and is now 1.7 MB,
-  because that path shares the gathering change above. `List.Map` versus
-  `Seq` map-and-collect moves from 7× to 6× for the same reason — the
-  thing it is compared against got faster.
-
-### Documentation
-
-- The `v1.3.x` series is archived at `/1-3/`, per the rule that a minor
-  series is snapshotted when the next minor ships.
 
 ## [1.3.0] — 2026-08-31
 
@@ -219,7 +177,6 @@ it is retracted in `go.mod` and should not be used. Start here.
   `range`, which makes a 4-stage pipeline 25% faster than the same
   pipeline hand-built from raw closures.
 
-[1.4.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.4.0
 [1.3.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.3.0
 [1.2.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.2.0
 [1.1.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.1.0
