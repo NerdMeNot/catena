@@ -1,6 +1,18 @@
 # Builds and deploys the documentation site (website/ -> the catena-docs
 # Cloudflare Pages project, https://catena-docs.pages.dev).
 #
+# ## What gets published, and when
+#
+# Only a released tag is ever deployed. The site states the version it
+# documents, and its content is derived from the tree it is built from, so
+# publishing main would put the header and the content in disagreement the
+# moment anything lands unreleased — a reader following the site would be
+# told about operators `go get` cannot give them.
+#
+# So a push to main builds the site and runs every check against it, and
+# stops there. Deployment happens on a published release, or on a manual
+# dispatch, and both build the *tag*, never the branch.
+#
 # ## Why this job does not run `bun run build`
 #
 # That script is `bun run sync && astro build`, and `sync` derives the
@@ -36,13 +48,23 @@ on:
   # nothing under website/ changed. This covers a release published by
   # hand; the Release workflow creates its release with GITHUB_TOKEN,
   # which raises no `release` event, so that path dispatches this
-  # workflow explicitly instead.
+  # workflow explicitly instead, passing the tag it just published.
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (defaults to the latest release)'
+        required: false
+        type: string
 
 permissions:
   contents: read
+
+env:
+  # Resolved once, in the first step: the tag whose tree gets built. Empty
+  # on a push to main, which is the signal not to deploy.
+  PUBLISH_TAG: ''
 
 concurrency:
   group: docs-${{ github.ref }}
@@ -63,7 +85,35 @@ jobs:
       run:
         working-directory: website
     steps:
+      # A dispatch with no tag republishes the current release, which is
+      # the recovery path when a deploy fails or the site drifts.
+      - name: Resolve the tag to publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "${{ github.event_name }}" in
+            release)  tag='${{ github.event.release.tag_name }}' ;;
+            workflow_dispatch)
+              tag='${{ inputs.tag }}'
+              if [ -z "$tag" ]; then
+                tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+              fi
+              ;;
+            *) tag='' ;;   # push to main: build and check only
+          esac
+          echo "PUBLISH_TAG=$tag" >> "$GITHUB_ENV"
+          if [ -n "$tag" ]; then
+            echo "::notice::building $tag for deployment"
+          else
+            echo "::notice::building main for checks only — no deploy"
+          fi
+        working-directory: .
+
+      # The tag when there is one, so the deployed content is the released
+      # content; otherwise the pushed commit, for checks.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PUBLISH_TAG || github.sha }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -107,7 +157,7 @@ jobs:
       # fresh clone needs only the two secrets to publish. Idempotent: the
       # project is created only when the account does not already have it.
       - name: Ensure the Pages project exists
-        if: env.CLOUDFLARE_API_TOKEN != ''
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.PUBLISH_TAG != ''
         run: |
           if bunx wrangler pages project list 2>/dev/null | grep -q 'catena-docs'; then
             echo "project catena-docs already exists"
@@ -117,7 +167,7 @@ jobs:
           fi
 
       - name: Deploy to Cloudflare Pages
-        if: env.CLOUDFLARE_API_TOKEN != ''
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.PUBLISH_TAG != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -126,8 +176,14 @@ jobs:
           command: pages deploy dist --project-name=catena-docs
 
       - name: Deploy skipped
-        if: env.CLOUDFLARE_API_TOKEN == ''
+        if: env.CLOUDFLARE_API_TOKEN == '' || env.PUBLISH_TAG == ''
         run: |
-          echo "::notice::Site built and checked, but not deployed:" \
-               "CLOUDFLARE_API_TOKEN is not configured for this repository." \
-               "Create the catena-docs Pages project and add the secret to enable it."
+          if [ -z "$PUBLISH_TAG" ]; then
+            echo "::notice::Site built and checked. Not deployed: only a released" \
+                 "tag is published, so main's unreleased content never reaches the" \
+                 "site. It goes live when you cut a release."
+          else
+            echo "::notice::Site built and checked, but not deployed:" \
+                 "CLOUDFLARE_API_TOKEN is not configured for this repository." \
+                 "Create the catena-docs Pages project and add the secret to enable it."
+          fi

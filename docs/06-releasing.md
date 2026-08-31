@@ -53,12 +53,24 @@ a deploy always publishes what was reviewed rather than something
 generated unseen.
 
 The `Docs` workflow publishes it to the Cloudflare Pages project
-`catena-docs`, live at <https://catena-docs.pages.dev>. Deploying needs
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets;
-without them the workflow still builds and checks the site, then skips the
-deploy with a notice rather than failing — so a fork's pull request is not
-red for want of credentials it cannot have. Run `cd website && bun run
-dev` to read the site locally.
+`catena-docs`, live at <https://catena-docs.pages.dev>.
+
+**Only a released tag is ever deployed.** The site names the version it
+documents, and its content is derived from the tree it was built from, so
+publishing `main` would put the two in disagreement as soon as anything
+lands unreleased — the site would describe operators that `go get` cannot
+give the reader. A push to `main` therefore builds the site and runs every
+check against it and stops; the deploy happens when a release is
+published, and builds that tag. To republish the current release by hand —
+after a failed deploy, or if the site drifts — run `Actions → Docs → Run
+workflow`, leaving the tag blank to mean "the latest release".
+
+Deploying needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as
+repository secrets; without them the workflow still builds and checks the
+site, then skips the deploy with a notice rather than failing — so a
+fork's pull request is not red for want of credentials it cannot have. Run
+`cd website && bun run dev` to read the site locally, which does show the
+working tree.
 
 After changing anything the site derives from, run:
 
