@@ -166,6 +166,11 @@ jobs:
             bunx wrangler pages project create catena-docs --production-branch=main
           fi
 
+      # --branch is not optional here. Wrangler otherwise infers the branch
+      # from git, and a tag is checked out detached, so it infers "HEAD" and
+      # publishes a *preview* at head.catena-docs.pages.dev while production
+      # keeps serving whatever was deployed last. Naming the project's
+      # production branch is what makes a tag build land on the live site.
       - name: Deploy to Cloudflare Pages
         if: env.CLOUDFLARE_API_TOKEN != '' && env.PUBLISH_TAG != ''
         uses: cloudflare/wrangler-action@v3
@@ -173,7 +178,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: website
-          command: pages deploy dist --project-name=catena-docs
+          command: pages deploy dist --project-name=catena-docs --branch=main
 
       - name: Deploy skipped
         if: env.CLOUDFLARE_API_TOKEN == '' || env.PUBLISH_TAG == ''
