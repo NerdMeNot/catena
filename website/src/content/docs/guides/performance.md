@@ -118,17 +118,26 @@ is the *faster* one, because it changes the memory class. `TopNBy` against
 the natural hand-written spelling:
 
 ```go
-// Hand: sort a copy, take ten. O(n log n) time, O(n) memory — 4.1 MB
-// and 9.1ms on the benchmark input.
+// Hand: sort a copy, take ten. O(n log n) time, O(n) memory — 803 KB
+// and 3.3ms on the benchmark input.
 sorted := slices.Clone(orders)
 slices.SortFunc(sorted, func(a, b Order) int { return b.Amount - a.Amount })
 top := sorted[:10]
 ```
 
 ```go
-// catena: bounded heap of 10. 1 KB and 279µs — 32× faster, and shorter.
+// catena: bounded heap of 10. 1 KB and 275µs — 12× faster than the
+// hand-written sort above, and shorter.
 top := catena.FromSlice(orders).TopNBy(10, func(o Order) int { return o.Amount })
 ```
+
+Two comparisons live here and they answer different questions. Against a
+hand-written clone-and-sort, `TopNBy` is 12× faster and holds 803 KB less
+— that is the honest number if you would otherwise reach for `slices`.
+Against the same idea spelled through catena's own sort,
+`SortedDesc(s).Take(10)`, it is 32× faster and holds 1.7 MB less, because
+that spelling pays for the pipeline as well as the sort. Both are
+measured: `BenchmarkSortedTakeN_Hand` and `BenchmarkSortedTakeN`.
 
 The bounded-heap loop *can* be written by hand, of course — it's ~60 lines
 with sift-up/sift-down and stable tie-breaking, and now it's yours to
@@ -171,8 +180,9 @@ inner loop — the README says this plainly and means it.
 | Benchmark | Result |
 |---|---|
 | `FoldBy` vs `GroupBy` + fold per bucket | same speed, **2.97 MB → 1.2 KB** allocated |
-| `TopNBy(10)` vs `SortedDesc().Take(10)` | **32× faster**, 4.1 MB → 1 KB |
-| `List.Map` (exact prealloc) vs `Seq` map + collect | **7× faster**, 1 allocation |
+| `TopNBy(10)` vs a hand-written clone-sort-slice | **12× faster**, 803 KB → 1 KB |
+| `TopNBy(10)` vs `SortedDesc().Take(10)` | **32× faster**, 1.7 MB → 1 KB |
+| `List.Map` (exact prealloc) vs `Seq` map + collect | **6× faster**, 1 allocation |
 
 These are memory-class differences, not constant factors: `FoldBy` is
 bounded by distinct keys where `GroupBy` retains every element, and

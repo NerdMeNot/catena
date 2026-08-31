@@ -141,13 +141,14 @@ func (s Seq[T]) Associate[K comparable, V any](f func(T) (K, V)) map[K]V {
 // Partition splits elements by pred, preserving encounter order on both
 // sides; nil slices for empty sides. ⚠ Full drain.
 func (s Seq[T]) Partition(pred func(T) bool) (yes, no []T) {
+	var gy, gn gatherer[T]
 	src(s)(func(v T) bool {
 		if pred(v) {
-			yes = append(yes, v)
+			gy.add(v)
 		} else {
-			no = append(no, v)
+			gn.add(v)
 		}
 		return true
 	})
-	return yes, no
+	return gy.slice(), gn.slice()
 }

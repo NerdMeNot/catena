@@ -172,3 +172,65 @@ func posCheck(op, arg string, n int) {
 		panic("catena: " + op + ": " + arg + " must be > 0")
 	}
 }
+
+// gatherer accumulates an unbounded number of elements without ever
+// recopying the prefix it has already collected.
+//
+// Plain append is the obvious way to do this and is what every terminal
+// here used to do, but its growth curve is the wrong shape at size: past
+// 256 elements Go grows a slice by roughly a quarter, so each step both
+// allocates and copies everything gathered so far. Collecting 100k ints
+// that way allocates 4.1 MB to produce 800 KB, across 32 reallocations.
+//
+// So append is used only while the result is small — where its growth is
+// cheap and its slack is tight — and above that elements go into fixed
+// blocks that are never resized, then into one exact-sized slice at the
+// end. Two consequences worth stating: the slack is bounded by one block
+// rather than proportional to the result, and the returned slice has no
+// spare capacity for the caller to retain.
+type gatherer[T any] struct {
+	head   []T   // append-grown, until switchAt
+	blocks [][]T // full blocks, in order
+	cur    []T   // the block being filled
+	n      int
+}
+
+// Chosen so that anything a person would look at stays on the append path
+// and nothing changes for it, while the block path takes over well before
+// append's copying becomes the dominant cost.
+const (
+	gatherSwitchAt  = 1024
+	gatherBlockSize = 8192
+)
+
+func (g *gatherer[T]) add(v T) {
+	if g.n < gatherSwitchAt {
+		g.head = append(g.head, v)
+		g.n++
+		return
+	}
+	if g.cur == nil || len(g.cur) == gatherBlockSize {
+		if g.cur != nil {
+			g.blocks = append(g.blocks, g.cur)
+		}
+		g.cur = make([]T, 0, gatherBlockSize)
+	}
+	g.cur = append(g.cur, v)
+	g.n++
+}
+
+// slice returns everything gathered, nil for nothing (§ nil-for-empty).
+func (g *gatherer[T]) slice() []T {
+	if g.n == 0 {
+		return nil
+	}
+	if g.cur == nil {
+		return g.head // never crossed the threshold: append's own result
+	}
+	out := make([]T, 0, g.n)
+	out = append(out, g.head...)
+	for _, b := range g.blocks {
+		out = append(out, b...)
+	}
+	return append(out, g.cur...)
+}

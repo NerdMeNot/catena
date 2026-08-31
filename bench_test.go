@@ -5,6 +5,7 @@ package catena_test
 // and the fused-operator wins. Run: go test -bench . -benchmem
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/NerdMeNot/catena"
@@ -115,6 +116,19 @@ func BenchmarkTopNBy(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		benchSink = s.TopNBy(10, catena.Self[int])[0]
+	}
+}
+
+// The natural hand-written spelling of "top ten": clone, sort, slice. It
+// is the honest comparison for TopN, and a different number from
+// BenchmarkSortedTakeN below — which measures the same idea expressed
+// through catena's own sort, and so carries the pipeline's cost too.
+func BenchmarkSortedTakeN_Hand(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		sorted := slices.Clone(benchData)
+		slices.SortFunc(sorted, func(a, c int) int { return c - a })
+		benchSink = sorted[:10][0]
 	}
 }
 

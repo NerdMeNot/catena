@@ -221,34 +221,34 @@ func (t Try[T]) UntilDone(ctx context.Context) Try[T] {
 // partial slice and that error (R5); (all elements, nil) on a clean drain.
 // Nil slice for empty.
 func (t Try[T]) Collect() ([]T, error) {
-	var out []T
+	var g gatherer[T]
 	var ferr error
 	srcTry(t)(func(v T, err error) bool {
 		if err != nil {
 			ferr = err
 			return false
 		}
-		out = append(out, v)
+		g.add(v)
 		return true
 	})
-	return out, ferr
+	return g.slice(), ferr
 }
 
 // CollectAll drains everything, gathering all successes and all errors.
 // Positional correspondence between the two slices is lost. Nil slices
 // when empty. ⚠ Full drain.
 func (t Try[T]) CollectAll() ([]T, []error) {
-	var out []T
-	var errs []error
+	var gv gatherer[T]
+	var ge gatherer[error]
 	srcTry(t)(func(v T, err error) bool {
 		if err != nil {
-			errs = append(errs, err)
+			ge.add(err)
 		} else {
-			out = append(out, v)
+			gv.add(v)
 		}
 		return true
 	})
-	return out, errs
+	return gv.slice(), ge.slice()
 }
 
 // Fold reduces successful elements until the first error, returning the

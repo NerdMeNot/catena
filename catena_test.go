@@ -8,6 +8,7 @@ package catena_test
 import (
 	"iter"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -109,5 +110,116 @@ func TestInteropSeqConversion(t *testing.T) {
 func TestVersion(t *testing.T) {
 	if !strings.HasPrefix(catena.Version, "0.") && !strings.HasPrefix(catena.Version, "1.") {
 		t.Fatalf("Version %q does not look like a semantic version", catena.Version)
+	}
+}
+
+// ---- the gathering terminals, across the block boundaries ----
+
+// Collect and its relatives switch accumulation strategy at 1024 elements
+// and again every 8192 after that. Statement coverage says nothing about
+// whether the seams are right, so every terminal that gathers is checked
+// either side of both, against a slice built the obvious way.
+func TestGatheringAcrossBlockBoundaries(t *testing.T) {
+	sizes := []int{0, 1, 1023, 1024, 1025, 9215, 9216, 9217, 17409}
+
+	for _, n := range sizes {
+		want := make([]int, n)
+		for i := range want {
+			want[i] = i
+		}
+		src := catena.FromSlice(want)
+
+		t.Run("Collect/"+strconv.Itoa(n), func(t *testing.T) {
+			got := src.Collect()
+			if !slices.Equal(got, want) {
+				t.Fatalf("len %d, want %d", len(got), n)
+			}
+			if n == 0 && got != nil {
+				t.Fatal("empty must collect to nil")
+			}
+			// The whole point of the block strategy: no slack handed to
+			// the caller to retain. Only above the switch — at or below
+			// it the result is append's own slice, slack and all, which
+			// is what it has always been.
+			if n > 1024 && cap(got) != n {
+				t.Fatalf("cap %d for %d elements — expected exact", cap(got), n)
+			}
+		})
+
+		t.Run("ToList/"+strconv.Itoa(n), func(t *testing.T) {
+			if got := src.ToList(); !slices.Equal([]int(got), want) {
+				t.Fatalf("len %d, want %d", len(got), n)
+			}
+		})
+
+		t.Run("Partition/"+strconv.Itoa(n), func(t *testing.T) {
+			yes, no := src.Partition(func(v int) bool { return v%2 == 0 })
+			if len(yes)+len(no) != n {
+				t.Fatalf("%d + %d != %d", len(yes), len(no), n)
+			}
+			for _, v := range yes {
+				if v%2 != 0 {
+					t.Fatalf("odd %d on the yes side", v)
+				}
+			}
+		})
+
+		t.Run("Unzip/"+strconv.Itoa(n), func(t *testing.T) {
+			ks, vs := catena.Unzip(src.WithIndex())
+			if len(ks) != n || len(vs) != n {
+				t.Fatalf("got %d/%d, want %d", len(ks), len(vs), n)
+			}
+			if !slices.Equal(vs, want) {
+				t.Fatal("values lost their order")
+			}
+		})
+
+		t.Run("TryCollect/"+strconv.Itoa(n), func(t *testing.T) {
+			got, err := src.MapErr(func(v int) (int, error) { return v, nil }).Collect()
+			if err != nil || !slices.Equal(got, want) {
+				t.Fatalf("got %d elements, err %v", len(got), err)
+			}
+		})
+
+		t.Run("CollectAll/"+strconv.Itoa(n), func(t *testing.T) {
+			// every third element fails, so both gatherers cross the seam
+			vals, errs := src.MapErr(func(v int) (int, error) {
+				if v%3 == 2 {
+					return 0, errBoom
+				}
+				return v, nil
+			}).CollectAll()
+			if len(vals)+len(errs) != n {
+				t.Fatalf("%d + %d != %d", len(vals), len(errs), n)
+			}
+		})
+
+		t.Run("SortedBy/"+strconv.Itoa(n), func(t *testing.T) {
+			// reverse the input so the sort has real work, then check the
+			// buffered entries survived the block seams in order
+			rev := slices.Clone(want)
+			slices.Reverse(rev)
+			got := catena.FromSlice(rev).SortedBy(func(v int) int { return v }).Collect()
+			if !slices.Equal(got, want) {
+				t.Fatalf("sorted result wrong at n=%d", n)
+			}
+		})
+	}
+}
+
+// Cycle replays from the same gathered buffer, so its first pass crossing
+// a block seam must not disturb what it replays afterwards.
+func TestCycleReplayAcrossBlocks(t *testing.T) {
+	const n = 1500
+	in := make([]int, n)
+	for i := range in {
+		in[i] = i
+	}
+	got := catena.Cycle(catena.FromSlice(in)).Take(n * 2).Collect()
+	if len(got) != n*2 {
+		t.Fatalf("got %d, want %d", len(got), n*2)
+	}
+	if !slices.Equal(got[:n], in) || !slices.Equal(got[n:], in) {
+		t.Fatal("replayed pass differs from the first")
 	}
 }

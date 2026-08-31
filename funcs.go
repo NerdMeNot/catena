@@ -346,14 +346,14 @@ func Chain[T any](seqs ...Seq[T]) Seq[T] {
 // Unzip drains a pair sequence into its two sides; nil slices for empty
 // input. ⚠ Full drain; buffers both sides.
 func Unzip[K, V any](s Seq2[K, V]) ([]K, []V) {
-	var ks []K
-	var vs []V
+	var gk gatherer[K]
+	var gv gatherer[V]
 	src2(s)(func(k K, v V) bool {
-		ks = append(ks, k)
-		vs = append(vs, v)
+		gk.add(k)
+		gv.add(v)
 		return true
 	})
-	return ks, vs
+	return gk.slice(), gv.slice()
 }
 
 // CollectMap drains a pair sequence into a map; on duplicate keys the last

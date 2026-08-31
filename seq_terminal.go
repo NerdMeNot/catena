@@ -17,12 +17,12 @@ import (
 // same drain returning a List, which carries the eager operator set.
 // ⚠ Full drain.
 func (s Seq[T]) Collect() []T {
-	var out []T
+	var g gatherer[T]
 	src(s)(func(v T) bool {
-		out = append(out, v)
+		g.add(v)
 		return true
 	})
-	return out
+	return g.slice()
 }
 
 // ToList drains the sequence into a List; nil for empty. ⚠ Full drain.

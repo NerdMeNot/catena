@@ -201,11 +201,12 @@ func sortedByKey[T any, K cmp.Ordered](s Seq[T], sel func(T) K, desc bool) Seq[T
 			v T
 			k K
 		}
-		var buf []entry
+		var g gatherer[entry]
 		src(s)(func(v T) bool {
-			buf = append(buf, entry{v, sel(v)})
+			g.add(entry{v, sel(v)})
 			return true
 		})
+		buf := g.slice()
 		slices.SortStableFunc(buf, func(a, b entry) int {
 			if desc {
 				return cmp.Compare(b.k, a.k)

@@ -118,7 +118,7 @@ Not syntax sugar — these change the memory class of the computation.
 | Use | Instead of | And it costs |
 |---|---|---|
 | `FoldBy` | `GroupBy` + fold per bucket | 2.97 MB → **1.2 KB** (bounded by keys, not elements) |
-| `TopNBy(10, sel)` | `SortedDesc().Take(10)` | 4.1 MB → **1 KB**, 32× faster (bounded heap) |
+| `TopNBy(10, sel)` | `SortedDesc().Take(10)` | 1.7 MB → **1 KB**, 32× faster (bounded heap) |
 | `DedupeBy` | `DistinctBy` on sorted input | unbounded seen-set → **O(1)** |
 
 ## Performance, before you choose

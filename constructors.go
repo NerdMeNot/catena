@@ -185,16 +185,17 @@ func Range[I Integer](start, stop, step I) Seq[I] {
 // terminates rather than spinning.
 func Cycle[T any](s Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
-		var buf []T
+		var g gatherer[T]
 		stopped := false
 		src(s)(func(v T) bool {
-			buf = append(buf, v)
+			g.add(v)
 			if !yield(v) {
 				stopped = true
 				return false
 			}
 			return true
 		})
+		buf := g.slice()
 		if stopped || len(buf) == 0 {
 			return
 		}
