@@ -6,8 +6,17 @@
 // page data to overrides. The heading id is Starlight's own constant
 // value, inlined because the constants module is not a public export —
 // anchors and skip links point at it.
+//
+// VersionNotice is the plugin's outdated-version banner. It renders
+// nothing on the current version and an orange notice on an archived one.
+// It belongs here because this override displaces the plugin's own
+// PageTitle, which is where it would otherwise appear.
+import VersionNotice from 'starlight-versions/components/VersionNotice.astro'
+
 const { entry } = Astro.locals.starlightRoute
 ---
+
+<VersionNotice />
 
 <h1 id="_top">{entry.data.title}</h1>
 

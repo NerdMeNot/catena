@@ -9,14 +9,16 @@
 //
 // ## Versioning
 //
-// The version shown in the header comes from `version.go`, through the
-// sync script — there is no version string written down twice. Today the
-// site documents one release, so it needs no version *switcher*; when a
-// second release exists, add `starlight-versions` (already a dependency)
-// with the previous release as an archived version. The procedure is in
-// docs/06-releasing.md, under "Versioning the website".
+// The current version comes from `version.go` through the sync script, so
+// no version string is written down twice. Past releases are archived
+// under `src/content/docs/<slug>/` and listed below; `starlight-versions`
+// serves them and adds the switcher. Those directories are snapshots of a
+// release that no longer exists in this tree — nothing regenerates them,
+// which is why `scripts/sync.ts` clears only the directories it owns.
+// The procedure for archiving one is in docs/06-releasing.md.
 import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
+import starlightVersions from 'starlight-versions'
 
 import site from './src/data/site.json' with { type: 'json' }
 
@@ -43,9 +45,25 @@ export default defineConfig({
           codeFontFamily: 'var(--catena-mono)',
         },
       },
+      plugins: [
+        starlightVersions({
+          // Labelled with the release it documents rather than "Latest",
+          // so the switcher names a version a reader can `go get`.
+          current: { label: `v${site.version}` },
+          // Archived releases, newest first. Each needs its snapshot
+          // committed under src/content/docs/<slug>/.
+          versions: [{ slug: '1-1', label: 'v1.1.0' }],
+        }),
+      ],
       components: {
         // Starlight's two loudest tells: its header lockup and its page
         // title block. Both are replaced so the site reads as catena's.
+        //
+        // The versions plugin also wants PageTitle (for its outdated-version
+        // notice), and a config override wins over a plugin's. So Header and
+        // PageTitle render the plugin's components themselves — see both
+        // files. Without that the notice would be silently dropped and a
+        // reader on an archived page would never be told.
         Header: './src/components/Header.astro',
         PageTitle: './src/components/PageTitle.astro',
       },

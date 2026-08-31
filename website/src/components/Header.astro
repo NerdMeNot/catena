@@ -4,12 +4,17 @@
 // chip belongs next to the name — a reader should never have to wonder
 // which release the page in front of them describes.
 import type { Props } from '@astrojs/starlight/props'
-import Search from '@astrojs/starlight/components/Search.astro'
 import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro'
 
-import ThemeToggle from './ThemeToggle.astro'
+// Both come from starlight-versions rather than Starlight. This header is
+// a config-level component override, which wins over the plugin's own, so
+// the plugin's versions of these would never render unless imported here.
+// VersionSearch scopes results to the version being read — searching from
+// an archived page must not return pages about a release you are not on.
+import VersionSearch from 'starlight-versions/components/VersionSearch.astro'
+import VersionSelect from 'starlight-versions/components/VersionSelect.astro'
 
-import site from '../data/site.json'
+import ThemeToggle from './ThemeToggle.astro'
 ---
 
 <div class="header-inner">
@@ -17,13 +22,11 @@ import site from '../data/site.json'
     <img class="mark on-light" src="/icon.svg" alt="" width="30" height="30" />
     <img class="mark on-dark" src="/icon-dark.svg" alt="" width="30" height="30" />
     <span class="wordmark">catena</span>
-    <span class="version" title={`These docs describe catena v${site.version}`}>
-      v{site.version}
-    </span>
   </a>
 
   <div class="right">
-    <Search {...Astro.props} />
+    <div class="version"><VersionSelect /></div>
+    <VersionSearch {...Astro.props} />
     <div class="controls">
       <ThemeToggle />
       <SocialIcons {...Astro.props} />
@@ -63,18 +66,22 @@ import site from '../data/site.json'
     font-variation-settings: 'opsz' 30;
   }
 
-  /* The version is a fact about the page, so it is stated plainly rather
-     than styled as a badge shouting for attention. */
-  .version {
+  /* The version is a fact about the page and now also the control that
+     changes it, so it keeps the chip's quiet styling rather than becoming
+     a second thing competing with the wordmark. */
+  .version :global(select) {
     font-family: var(--catena-mono);
     font-size: 0.7rem;
     font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  .version :global(label) {
     color: var(--sl-color-gray-3);
     background: var(--catena-chip);
     border: 1px solid var(--catena-rule);
     border-radius: 999px;
-    padding: 0.12rem 0.45rem;
-    letter-spacing: 0.01em;
+    padding: 0.05rem 0.3rem;
   }
 
   .right {

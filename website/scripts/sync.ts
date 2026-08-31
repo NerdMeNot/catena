@@ -113,11 +113,16 @@ const firstStable = '1.1.0'
 async function main() {
   const version = await documentedVersion()
 
-  await rm(outDir, { recursive: true, force: true })
-  await mkdir(join(outDir, 'guides'), { recursive: true })
-  await mkdir(join(outDir, 'operators'), { recursive: true })
-  await mkdir(join(outDir, 'examples'), { recursive: true })
-  await mkdir(join(outDir, 'reference'), { recursive: true })
+  // Only the directories this script owns are cleared. Archived versions
+  // (src/content/docs/1-1/ and friends) are snapshots of a past release
+  // that no longer exists in this working tree, so nothing here can
+  // regenerate them — wiping the whole content directory would destroy
+  // them permanently on the next sync.
+  const generated = ['guides', 'operators', 'examples', 'reference']
+  for (const dir of generated) {
+    await rm(join(outDir, dir), { recursive: true, force: true })
+    await mkdir(join(outDir, dir), { recursive: true })
+  }
   await mkdir(dataDir, { recursive: true })
 
   // ---- guides, from docs/0N-*.md ----

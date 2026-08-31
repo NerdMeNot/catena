@@ -85,28 +85,61 @@ generated content says.
 
 ### Versioning the website
 
-The site documents one release at a time and shows which in its header.
-When a **second** release exists, archive the previous one so readers on
-an older version still have its docs:
+The site serves the current release at the root and every archived release
+under its own prefix, with a switcher in the header. `v1.1.0` is archived
+at `/1-1/`, and its pages carry a notice saying so and linking to the
+current one.
 
-1. Add the plugin to `website/astro.config.mjs` (it is already a
-   dependency):
+To archive a release when you cut the next one:
 
-   ```js
-   import starlightVersions from 'starlight-versions'
+1. **Take the snapshot from the tag, not from the working tree.** The
+   plugin will happily snapshot whatever is currently in
+   `src/content/docs/`, but that is the *new* release — filing it under
+   the old version's name would publish the new API as though it were the
+   old one. Copy the real thing out of the tag instead:
 
-   plugins: [starlightVersions({ versions: [{ slug: '1-1' }] })]
+   ```sh
+   dest=website/src/content/docs/1-2
+   mkdir -p "$dest"
+   git archive v1.2.0 website/src/content/docs | tar -x --strip-components=4 -C "$dest"
    ```
 
-2. Run `bun run astro dev` once. The plugin snapshots the current pages
-   into `src/content/docs/1-1/` — commit that directory.
-3. From then on, `src/content/docs/**` is the *next* version and the
-   snapshot is v1.1; a version selector appears in the header
-   automatically.
+2. **Record that version's sidebar** in
+   `website/src/content/versions/1-2.json`, as
+   `{"sidebar": [...], "excluded": []}`, copying the `sidebar` from that
+   tag's `astro.config.mjs`. The plugin refuses to build without it.
+3. **List it** in `astro.config.mjs`, newest first:
 
-Do this at the release that creates the second version, not before: the
-plugin requires at least one archived version, and archiving the only
-release you have would mean the site had no current one.
+   ```js
+   versions: [{ slug: '1-2', label: 'v1.2.0' }, { slug: '1-1', label: 'v1.1.0' }]
+   ```
+
+4. Build once and check the archived page shows the outdated-version
+   notice, the switcher offers both versions, and the archived operator
+   reference does *not* mention anything added since.
+
+Two things about the setup are worth knowing before you touch it. The
+archived directories are snapshots of a tree that no longer exists, so
+nothing can regenerate them — `scripts/sync.ts` therefore clears only the
+four directories it owns rather than all of `src/content/docs/`. And a
+component override in `astro.config.mjs` beats a plugin's, so `Header` and
+`PageTitle` render the plugin's `VersionSelect`, `VersionSearch` and
+`VersionNotice` themselves; drop those imports and the switcher and the
+outdated-version notice disappear silently.
+
+### Publishing a change to the site itself
+
+Deploying is normally tied to releases, which leaves a gap: a change to
+the site's own machinery — a new archived version, a layout fix — has
+nothing to do with the library and should not wait for one.
+
+`Actions → Docs → Run workflow` takes a ref, and it may be `main`. What
+keeps that honest is a guard in the workflow: the deploy fails unless
+`docs/operators/` at that ref is identical to the latest release tag. That
+directory is generated from the library's doc comments and its verified
+examples, so if it matches, the site describes exactly the API `go get`
+delivers, whatever else has changed. If it does not match, the library has
+moved and the answer is to cut a release rather than publish the branch.
 
 ## Versioning policy
 

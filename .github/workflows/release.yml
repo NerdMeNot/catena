@@ -117,4 +117,4 @@ jobs:
         # given, and the site must show the release, not whatever has
         # landed on main since.
         run: |
-          gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+          gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main -f ref="$TAG"

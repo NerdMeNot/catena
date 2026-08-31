@@ -53,8 +53,8 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to publish (defaults to the latest release)'
+      ref:
+        description: 'Tag or branch to publish (defaults to the latest release)'
         required: false
         type: string
 
@@ -62,9 +62,9 @@ permissions:
   contents: read
 
 env:
-  # Resolved once, in the first step: the tag whose tree gets built. Empty
-  # on a push to main, which is the signal not to deploy.
-  PUBLISH_TAG: ''
+  # Resolved once, in the first step: the ref whose tree gets built and
+  # published. Empty on a push to main, which is the signal not to deploy.
+  PUBLISH_REF: ''
 
 concurrency:
   group: docs-${{ github.ref }}
@@ -85,35 +85,65 @@ jobs:
       run:
         working-directory: website
     steps:
-      # A dispatch with no tag republishes the current release, which is
-      # the recovery path when a deploy fails or the site drifts.
-      - name: Resolve the tag to publish
+      # A dispatch with no ref republishes the current release, which is
+      # the recovery path when a deploy fails or the site drifts. A branch
+      # may be named instead, for a change to the site itself rather than
+      # to the library's documentation — the guard below is what keeps that
+      # honest, so it is not a way around the rule.
+      - name: Resolve the ref to publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           case "${{ github.event_name }}" in
-            release)  tag='${{ github.event.release.tag_name }}' ;;
+            release)  ref='${{ github.event.release.tag_name }}' ;;
             workflow_dispatch)
-              tag='${{ inputs.tag }}'
-              if [ -z "$tag" ]; then
-                tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+              ref='${{ inputs.ref }}'
+              if [ -z "$ref" ]; then
+                ref=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
               fi
               ;;
-            *) tag='' ;;   # push to main: build and check only
+            *) ref='' ;;   # push to main: build and check only
           esac
-          echo "PUBLISH_TAG=$tag" >> "$GITHUB_ENV"
-          if [ -n "$tag" ]; then
-            echo "::notice::building $tag for deployment"
+          echo "PUBLISH_REF=$ref" >> "$GITHUB_ENV"
+          if [ -n "$ref" ]; then
+            echo "::notice::building $ref for deployment"
           else
             echo "::notice::building main for checks only — no deploy"
           fi
         working-directory: .
 
-      # The tag when there is one, so the deployed content is the released
-      # content; otherwise the pushed commit, for checks.
+      # The ref being published when there is one; otherwise the pushed
+      # commit, for checks. Full history so the guard below can diff
+      # against the release tag.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.PUBLISH_TAG || github.sha }}
+          ref: ${{ env.PUBLISH_REF || github.sha }}
+          fetch-depth: 0
+
+      # The invariant the whole tag-only rule exists to protect: the
+      # operator reference is generated from the library's own doc comments
+      # and verified examples, so if it differs from the released tag, this
+      # build would document API that `go get` cannot deliver. Publishing a
+      # tag satisfies it trivially; publishing a branch satisfies it only
+      # while the library is untouched, which is exactly when a site-only
+      # change is safe to ship ahead of a release.
+      - name: The operator reference matches the released module
+        if: env.PUBLISH_REF != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          git fetch --quiet --no-tags origin "refs/tags/$latest:refs/tags/$latest" 2>/dev/null || true
+          if git diff --quiet "$latest" HEAD -- docs/operators; then
+            echo "::notice::operator reference matches $latest"
+          else
+            echo "::error::the operator reference differs from $latest, so this build" \
+                 "would document API the released module does not have. Cut a release" \
+                 "instead of publishing this ref."
+            git diff --stat "$latest" HEAD -- docs/operators
+            exit 1
+          fi
+        working-directory: .
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -157,7 +187,7 @@ jobs:
       # fresh clone needs only the two secrets to publish. Idempotent: the
       # project is created only when the account does not already have it.
       - name: Ensure the Pages project exists
-        if: env.CLOUDFLARE_API_TOKEN != '' && env.PUBLISH_TAG != ''
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.PUBLISH_REF != ''
         run: |
           if bunx wrangler pages project list 2>/dev/null | grep -q 'catena-docs'; then
             echo "project catena-docs already exists"
@@ -172,7 +202,7 @@ jobs:
       # keeps serving whatever was deployed last. Naming the project's
       # production branch is what makes a tag build land on the live site.
       - name: Deploy to Cloudflare Pages
-        if: env.CLOUDFLARE_API_TOKEN != '' && env.PUBLISH_TAG != ''
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.PUBLISH_REF != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -181,12 +211,12 @@ jobs:
           command: pages deploy dist --project-name=catena-docs --branch=main
 
       - name: Deploy skipped
-        if: env.CLOUDFLARE_API_TOKEN == '' || env.PUBLISH_TAG == ''
+        if: env.CLOUDFLARE_API_TOKEN == '' || env.PUBLISH_REF == ''
         run: |
-          if [ -z "$PUBLISH_TAG" ]; then
-            echo "::notice::Site built and checked. Not deployed: only a released" \
-                 "tag is published, so main's unreleased content never reaches the" \
-                 "site. It goes live when you cut a release."
+          if [ -z "$PUBLISH_REF" ]; then
+            echo "::notice::Site built and checked. Not deployed: a push to main" \
+                 "never publishes, so unreleased content cannot reach the site." \
+                 "It goes live when you cut a release." 
           else
             echo "::notice::Site built and checked, but not deployed:" \
                  "CLOUDFLARE_API_TOKEN is not configured for this repository." \
