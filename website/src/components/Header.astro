@@ -4,7 +4,7 @@
 // chip belongs next to the name — a reader should never have to wonder
 // which release the page in front of them describes.
 import type { Props } from '@astrojs/starlight/props'
-import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro'
+import SocialIcons from './SocialIcons.astro'
 
 // VersionSearch comes from starlight-versions rather than Starlight. This
 // header is a config-level component override, which wins over the
@@ -31,7 +31,7 @@ import ThemeToggle from './ThemeToggle.astro'
     <VersionSearch {...Astro.props} />
     <div class="controls">
       <ThemeToggle />
-      <SocialIcons {...Astro.props} />
+      <SocialIcons />
     </div>
   </div>
 </div>
@@ -81,4 +81,5 @@ import ThemeToggle from './ThemeToggle.astro'
     align-items: center;
     gap: 0.75rem;
   }
+
 </style>

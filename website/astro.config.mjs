@@ -66,6 +66,15 @@ export default defineConfig({
         // reader on an archived page would never be told.
         Header: './src/components/Header.astro',
         PageTitle: './src/components/PageTitle.astro',
+        // Starlight renders ThemeSelect in the mobile menu footer as well
+        // as in its header, and the versions plugin claims that slot for
+        // its native <select>. Claiming it first keeps the OS dropdown off
+        // the site entirely; the header already carries both the theme
+        // control and the version switcher at every width.
+        ThemeSelect: './src/components/ThemeToggle.astro',
+        // Starlight's social links cannot carry a target, and a link out
+        // to the repository should not replace the docs you are reading.
+        SocialIcons: './src/components/SocialIcons.astro',
       },
       social: [{ icon: 'github', label: 'GitHub', href: site.repoUrl }],
       editLink: { baseUrl: `${site.repoUrl}/edit/main/` },
@@ -108,7 +117,7 @@ export default defineConfig({
             {
               label: 'API on pkg.go.dev',
               link: `https://pkg.go.dev/${site.module}`,
-              attrs: { target: '_blank' },
+              attrs: { target: '_blank', rel: 'noopener noreferrer' },
             },
           ],
         },

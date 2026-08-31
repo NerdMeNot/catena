@@ -1,0 +1,37 @@
+---
+// The social links, rendered here rather than by Starlight so they can
+// carry a target. Starlight's `social` config takes an icon, a label and
+// an href and nothing else, so its own component always opens in the same
+// tab — which for a link off the docs and into the repository is the
+// wrong default. Overriding the component covers every place Starlight
+// renders these, the mobile menu footer included, and the site header
+// uses it too so there is one definition rather than two.
+import { Icon } from '@astrojs/starlight/components'
+import starlightConfig from 'virtual:starlight/user-config'
+
+const links = starlightConfig.social ?? []
+---
+
+{
+  links.map((link) => (
+    <a
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${link.label} (opens in a new tab)`}
+    >
+      <Icon name={link.icon} size="1.25rem" />
+    </a>
+  ))
+}
+
+<style>
+  a {
+    display: flex;
+    color: var(--sl-color-text-accent);
+  }
+
+  a:hover {
+    color: var(--sl-color-white);
+  }
+</style>

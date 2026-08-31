@@ -13,12 +13,19 @@
  * its <head>. Applying the theme here instead would mean a flash of the
  * wrong ground on every navigation.
  */
+
+// Starlight renders this in the mobile menu footer as well as in the site
+// header, so a page can hold two of them. Radios sharing a `name` form ONE
+// group however far apart they sit, and the browser keeps only the last
+// checked radio — which left the header's control showing nothing
+// selected. Each instance gets its own group; the script keeps them equal.
+const group = `catena-theme-${crypto.randomUUID().slice(0, 8)}`
 ---
 
 <fieldset class="theme-toggle">
   <legend class="sr-only">Theme</legend>
   <label title="Match system">
-    <input type="radio" name="catena-theme" value="auto" checked />
+    <input type="radio" name={group} data-catena-theme value="auto" checked />
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <rect x="1.5" y="2.5" width="13" height="9" rx="1.5"></rect>
       <path d="M5.5 14h5"></path>
@@ -26,7 +33,7 @@
     <span class="sr-only">System</span>
   </label>
   <label title="Light">
-    <input type="radio" name="catena-theme" value="light" />
+    <input type="radio" name={group} data-catena-theme value="light" />
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <circle cx="8" cy="8" r="3.1"></circle>
       <path
@@ -36,7 +43,7 @@
     <span class="sr-only">Light</span>
   </label>
   <label title="Dark">
-    <input type="radio" name="catena-theme" value="dark" />
+    <input type="radio" name={group} data-catena-theme value="dark" />
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1Z"></path>
     </svg>
@@ -74,11 +81,24 @@
       apply(choice)
     }
 
+    // Every instance on the page, not just this one: the control appears
+    // in the header and in the mobile menu, and they must not disagree.
+    const inputs = () => document.querySelectorAll('input[data-catena-theme]')
+
+    const syncAll = (choice) => {
+      for (const input of inputs()) input.checked = input.value === choice
+    }
+
     const current = stored()
     apply(current)
-    for (const input of document.querySelectorAll('input[name="catena-theme"]')) {
-      input.checked = input.value === current
-      input.addEventListener('change', () => set(input.value))
+    syncAll(current)
+    for (const input of inputs()) {
+      if (input.dataset.wired) continue
+      input.dataset.wired = '1'
+      input.addEventListener('change', () => {
+        set(input.value)
+        syncAll(input.value)
+      })
     }
 
     // Following the system while it changes is the point of `auto`.
