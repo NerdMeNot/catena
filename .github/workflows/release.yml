@@ -22,6 +22,8 @@ on:
 
 permissions:
   contents: write
+  # To dispatch the Docs workflow after publishing — see the last step.
+  actions: write
 
 jobs:
   verify:
@@ -100,3 +102,14 @@ jobs:
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "catena $TAG" --notes-file notes.md
           fi
+
+      # The site names the release it documents, so a release has to
+      # republish it. It cannot do that through the `release` trigger:
+      # the release above is created with GITHUB_TOKEN, and events raised
+      # by that token deliberately start no new runs, or every workflow
+      # could trigger itself. workflow_dispatch is the documented
+      # exception, so Docs is asked directly.
+      - name: Republish the documentation site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main

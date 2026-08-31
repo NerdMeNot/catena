@@ -33,7 +33,10 @@ on:
       - '.github/workflows/docs.yml'
   # The site states which release it documents, and that comes from the
   # changelog — so publishing a release must republish the site even when
-  # nothing under website/ changed.
+  # nothing under website/ changed. This covers a release published by
+  # hand; the Release workflow creates its release with GITHUB_TOKEN,
+  # which raises no `release` event, so that path dispatches this
+  # workflow explicitly instead.
   release:
     types: [published]
   workflow_dispatch:
