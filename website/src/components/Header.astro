@@ -6,13 +6,15 @@
 import type { Props } from '@astrojs/starlight/props'
 import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro'
 
-// Both come from starlight-versions rather than Starlight. This header is
-// a config-level component override, which wins over the plugin's own, so
-// the plugin's versions of these would never render unless imported here.
-// VersionSearch scopes results to the version being read — searching from
-// an archived page must not return pages about a release you are not on.
+// VersionSearch comes from starlight-versions rather than Starlight. This
+// header is a config-level component override, which wins over the
+// plugin's own, so the plugin's version would never render unless
+// imported here. It scopes results to the version being read — searching
+// from an archived page must not return pages about a release you are not
+// on. The switcher is ours; see VersionSwitcher.astro for why.
 import VersionSearch from 'starlight-versions/components/VersionSearch.astro'
-import VersionSelect from 'starlight-versions/components/VersionSelect.astro'
+
+import VersionSwitcher from './VersionSwitcher.astro'
 
 import ThemeToggle from './ThemeToggle.astro'
 ---
@@ -25,7 +27,7 @@ import ThemeToggle from './ThemeToggle.astro'
   </a>
 
   <div class="right">
-    <div class="version"><VersionSelect /></div>
+    <VersionSwitcher />
     <VersionSearch {...Astro.props} />
     <div class="controls">
       <ThemeToggle />
@@ -66,24 +68,6 @@ import ThemeToggle from './ThemeToggle.astro'
     font-variation-settings: 'opsz' 30;
   }
 
-  /* The version is a fact about the page and now also the control that
-     changes it, so it keeps the chip's quiet styling rather than becoming
-     a second thing competing with the wordmark. */
-  .version :global(select) {
-    font-family: var(--catena-mono);
-    font-size: 0.7rem;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-  }
-
-  .version :global(label) {
-    color: var(--sl-color-gray-3);
-    background: var(--catena-chip);
-    border: 1px solid var(--catena-rule);
-    border-radius: 999px;
-    padding: 0.05rem 0.3rem;
-  }
-
   .right {
     display: flex;
     align-items: center;
@@ -96,11 +80,5 @@ import ThemeToggle from './ThemeToggle.astro'
     display: flex;
     align-items: center;
     gap: 0.75rem;
-  }
-
-  @media (max-width: 50rem) {
-    .version {
-      display: none;
-    }
   }
 </style>

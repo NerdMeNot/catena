@@ -1,0 +1,269 @@
+---
+// The version switcher in the header.
+//
+// starlight-versions ships one, but it is a native <select>: the option
+// list is drawn by the operating system, so it cannot take the site's
+// type, colours or spacing, and it lands mid-header as a grey system
+// widget. This renders the same information as a normal disclosure, which
+// is styleable, and as real links — so a version can be opened in a new
+// tab, which a <select> never allows.
+//
+// URLs are computed here rather than imported: the plugin's helpers live
+// behind a path its package exports do not expose. The mapping is small —
+// strip a leading version segment to get the path shared by every
+// version, then prefix it for the version being linked to.
+import starlightVersionsConfig from 'virtual:starlight-versions-config'
+import { getCollection } from 'astro:content'
+
+const versions = starlightVersionsConfig.versions
+const currentLabel = starlightVersionsConfig.current.label
+
+// Which pages actually exist in each version. Versions diverge — a page
+// added after a release has no counterpart in it — so a link to "this same
+// page, one version back" can point at nothing. Where it would, the link
+// falls back to that version's front page, which always exists.
+const pageIds = new Set((await getCollection('docs')).map((doc) => doc.id))
+
+const path = Astro.url.pathname
+const [, first] = path.split('/')
+const onVersion = versions.find((v) => v.slug === first)
+
+// The path with any version prefix removed: what this page is called in
+// every version.
+const shared = onVersion ? path.slice(`/${onVersion.slug}`.length) || '/' : path
+
+/** The URL for `shared` in the given version, or that version's root. */
+function hrefFor(slug: string | undefined): string {
+  const root = slug ? `/${slug}/` : '/'
+  if (shared === '/') return root
+  const id = `${slug ? `${slug}` : ''}${shared}`.replace(/^\/|\/$/g, '')
+  if (!pageIds.has(id)) return root
+  return slug ? `/${slug}${shared}` : shared
+}
+
+const entries = [
+  { label: currentLabel, href: hrefFor(undefined), current: !onVersion },
+  ...versions.map((v) => ({
+    label: v.label ?? v.slug,
+    href: hrefFor(v.slug),
+    current: v.slug === onVersion?.slug,
+  })),
+]
+
+const active = entries.find((e) => e.current) ?? entries[0]
+---
+
+<version-switcher>
+  <details class="vs">
+    <summary aria-label={`Version: ${active.label}. Change version`}>
+      <span class="label">{active.label}</span>
+      <svg class="caret" viewBox="0 0 10 6" aria-hidden="true" width="10" height="6">
+        <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </summary>
+    <div class="panel" role="group" aria-label="Documentation versions">
+      <p class="heading">Version</p>
+      <ul>
+        {entries.map((e) => (
+          <li>
+            <a href={e.href} aria-current={e.current ? 'true' : undefined}>
+              <span class="tick" aria-hidden="true"></span>
+              <span class="name">{e.label}</span>
+              {e.current && <span class="note">you are here</span>}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </details>
+</version-switcher>
+
+<script>
+  // Close on outside click, on Escape, and after following a link — the
+  // three ways a disclosure should stop being open. Everything else the
+  // <details> element already does, including keyboard toggling.
+  class VersionSwitcher extends HTMLElement {
+    connectedCallback() {
+      const details = this.querySelector('details')
+      if (!details) return
+
+      const close = () => details.removeAttribute('open')
+
+      document.addEventListener('click', (event) => {
+        if (details.hasAttribute('open') && !this.contains(event.target as Node)) close()
+      })
+
+      this.addEventListener('keydown', (event) => {
+        if ((event as KeyboardEvent).key === 'Escape' && details.hasAttribute('open')) {
+          close()
+          details.querySelector('summary')?.focus()
+        }
+      })
+
+      this.addEventListener('click', (event) => {
+        if ((event.target as HTMLElement).closest('a')) close()
+      })
+    }
+  }
+
+  customElements.define('version-switcher', VersionSwitcher)
+</script>
+
+<style>
+  .vs {
+    position: relative;
+  }
+
+  /* The chip. Quiet by default — it states a fact about the page, and only
+     looks like a control on hover or focus. */
+  summary {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.4rem 0.15rem 0.5rem;
+    font-family: var(--catena-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: var(--sl-color-gray-2);
+    background: var(--catena-chip);
+    border: 1px solid var(--catena-rule);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    white-space: nowrap;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+
+  summary::-webkit-details-marker,
+  summary::marker {
+    display: none;
+    content: '';
+  }
+
+  summary:hover,
+  .vs[open] summary {
+    color: var(--sl-color-white);
+    border-color: var(--catena-faint);
+  }
+
+  summary:focus-visible {
+    outline: 2px solid var(--catena-toggle-accent);
+    outline-offset: 2px;
+  }
+
+  .caret {
+    color: var(--catena-faint);
+    transition: transform 0.15s ease;
+  }
+
+  .vs[open] .caret {
+    transform: rotate(180deg);
+  }
+
+  .panel {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    z-index: 50;
+    min-width: 11rem;
+    padding: 0.4rem;
+    background: var(--sl-color-bg);
+    border: 1px solid var(--catena-rule);
+    border-radius: 0.6rem;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.04),
+      0 8px 24px rgb(0 0 0 / 0.12);
+    animation: pop 0.13s ease;
+  }
+
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: translateY(-3px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel {
+      animation: none;
+    }
+    .caret {
+      transition: none;
+    }
+  }
+
+  .heading {
+    margin: 0.15rem 0.5rem 0.35rem;
+    font-family: var(--catena-sans);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--catena-faint);
+  }
+
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  a {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 0.4rem;
+    font-family: var(--catena-mono);
+    font-size: 0.78rem;
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+  }
+
+  a:hover {
+    background: var(--catena-chip);
+    color: var(--sl-color-white);
+  }
+
+  a:focus-visible {
+    outline: 2px solid var(--catena-toggle-accent);
+    outline-offset: -2px;
+  }
+
+  /* A dot rather than a checkmark: it marks the row without adding a
+     second glyph language to a header that already has icons. */
+  .tick {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: transparent;
+    flex: none;
+  }
+
+  a[aria-current='true'] {
+    color: var(--sl-color-white);
+  }
+
+  a[aria-current='true'] .tick {
+    background: var(--catena-ember);
+  }
+
+  .name {
+    flex: 1;
+  }
+
+  .note {
+    font-family: var(--catena-sans);
+    font-size: 0.62rem;
+    color: var(--catena-faint);
+  }
+
+  @media (max-width: 50rem) {
+    .note {
+      display: none;
+    }
+  }
+</style>
