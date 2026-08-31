@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; }
+  body {
+    background: #fbfbfc;
+    color: #33475b;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 96px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* a single quiet rule, echoing the site's page-title underline */
+  .rule { position:absolute; left:0; right:0; top:0; height:6px;
+          background: linear-gradient(90deg, #33475b 0%, #33475b 55%, #d9642b 55%, #d9642b 100%); }
+  .lockup { display:flex; align-items:center; gap:22px; margin-bottom:34px; }
+  .lockup svg { width:108px; height:108px; }
+  h1 { font-family:'Fraunces', Georgia, serif; font-weight:600; font-size:92px;
+       letter-spacing:-0.025em; line-height:1; font-variation-settings:'opsz' 96; }
+  .lede { font-size:33px; line-height:1.35; font-weight:400; max-width:1000px; color:#4a5b6e; }
+  .lede b { font-weight:500; color:#33475b; }
+  code { font-family:'JetBrains Mono', ui-monospace, monospace; font-size:26px;
+         background:#eef0f4; border:1px solid #e2e5ea; border-radius:8px;
+         padding:4px 12px; color:#33475b; }
+  .foot { position:absolute; left:96px; bottom:52px; display:flex; align-items:center; gap:18px;
+          font-family:'JetBrains Mono', ui-monospace, monospace; font-size:22px; color:#667485; }
+  .dot { width:5px; height:5px; border-radius:50%; background:#c3cad3; }
+</style></head>
+<body>
+  <div class="rule"></div>
+  <div class="lockup">
+    <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><title>catena</title><defs><clipPath id="near"><circle cx="38.59" cy="41.70" r="16.20"/></clipPath><mask id="weave" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="-64" y="-64" width="192" height="192"><rect x="-64" y="-64" width="192" height="192" fill="#fff"/><g clip-path="url(#near)"><path d="M 1.98 13.00 L -15.20 13.00 A 13 13 0 0 1 -15.20 -13.00 L 15.20 -13.00 A 13 13 0 0 1 15.20 13.00 L 7.14 13.00" transform="translate(14.80 43.69) rotate(-34.2)" fill="none" stroke="#000" stroke-width="10.80" stroke-linecap="butt"/></g></mask></defs><g transform="translate(32 32) scale(0.5620754059677135) translate(-32 -32)" fill="none" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"><path d="M 1.98 13.00 L -15.20 13.00 A 13 13 0 0 1 -15.20 -13.00 L 15.20 -13.00 A 13 13 0 0 1 15.20 13.00 L 7.14 13.00" transform="translate(14.80 43.69) rotate(-34.2)" stroke="#33475B"/><g mask="url(#weave)"><path d="M 1.98 13.00 L -15.20 13.00 A 13 13 0 0 1 -15.20 -13.00 L 15.20 -13.00 A 13 13 0 0 1 15.20 13.00 L 7.14 13.00" transform="translate(49.20 20.31) rotate(145.8)" stroke="#D9642B"/></g></g></svg>
+    <h1>catena</h1>
+  </div>
+  <p class="lede">Lazy, fully typed sequence pipelines for Go. Kotlin and LINQ
+     ergonomics on <code>iter.Seq</code>, with every operator&rsquo;s
+     <b>memory class</b> and <b>termination behaviour</b> specified and tested.</p>
+  <div class="foot">
+    <span>Go 1.27+</span><span class="dot"></span>
+    <span>183 operators</span><span class="dot"></span>
+    <span>100% covered</span><span class="dot"></span>
+    <span>Apache-2.0</span>
+  </div>
+</body></html>

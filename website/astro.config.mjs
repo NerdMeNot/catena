@@ -81,6 +81,25 @@ export default defineConfig({
       lastUpdated: true,
       pagination: true,
       head: [
+        // Starlight sets og:title, og:description and og:type; the image
+        // is not among them, so a link to this site unfurls without one.
+        // Absolute by necessity — Open Graph consumers do not resolve
+        // relative URLs.
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image', content: `${site.siteUrl}/social-preview.png` },
+        },
+        { tag: 'meta', attrs: { property: 'og:image:width', content: '1280' } },
+        { tag: 'meta', attrs: { property: 'og:image:height', content: '640' } },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image:alt', content: 'catena — lazy, fully typed sequence pipelines for Go' },
+        },
+        { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+        {
+          tag: 'meta',
+          attrs: { name: 'twitter:image', content: `${site.siteUrl}/social-preview.png` },
+        },
         { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
         {
           tag: 'link',
