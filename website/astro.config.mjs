@@ -52,9 +52,15 @@ export default defineConfig({
           current: { label: `v${site.version}` },
           // Archived releases, newest first. Each needs its snapshot
           // committed under src/content/docs/<slug>/.
+          // One entry per MINOR series, not per tag: pkg.go.dev already
+          // archives every tag's API, and under semver a patch cannot
+          // change one — so a patch's docs are its minor's docs. Labelled
+          // by the series for the same reason. Retracted versions are
+          // never listed; offering docs for a version `go get` refuses to
+          // select would be worse than offering none.
           versions: [
-            { slug: '1-2', label: 'v1.2.0' },
-            { slug: '1-1', label: 'v1.1.0' },
+            { slug: '1-2', label: 'v1.2.x' },
+            { slug: '1-1', label: 'v1.1.x' },
           ],
         }),
       ],

@@ -1,14 +1,14 @@
 ---
-title: catena v1.1.0
-description: Documentation for catena v1.1.0, an archived release.
+title: catena v1.1
+description: Documentation for the catena v1.1 series, an archived release.
 sidebar:
   hidden: true
 ---
 
-You are reading the documentation for **catena v1.1.0**, an archived
-release. The current release is documented at [the top of this
-site](/guides/getting-started/), and the switcher in the header moves
-between them.
+You are reading the documentation for the **catena v1.1 series**, which
+is archived. The last release in it was `v1.1.0`. The current release is
+documented at [the top of this site](/guides/getting-started/), and the
+switcher in the header moves between them.
 
 To stay on this version:
 
