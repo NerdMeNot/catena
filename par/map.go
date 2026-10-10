@@ -10,14 +10,17 @@ import (
 // Map returns a stage that yields f applied to each element, running up to
 // n calls at once and yielding results in source order. A failed call
 // yields (zero, err) and the stage continues. When ctx is done the stage
-// stops consuming, yields (zero, ctx.Err()) once, and ends; f receives a
-// context that is also cancelled the moment the consumer stops. The
+// stops consuming, yields (zero, ctx.Err()) once in place of any results
+// it still held, and ends; over an empty source it yields nothing. f
+// receives a context that is also cancelled the moment the consumer
+// stops. The
 // source runs on the consumer's goroutine. ⚠ Starts up to n goroutines
 // per iteration, all joined before it returns. ⚠ Consumes at
 // most n elements beyond those yielded, and holds their results: one slow
 // call at the head delays everything behind it (MapUnordered does not).
-// ⚠ A finished result is delivered only when the source next yields or
-// ends, so behind a slow live source it waits for the next element.
+// ⚠ A finished result is delivered, and a done ctx is noticed, only when
+// the source next yields or ends: behind a slow live source both wait
+// for the next element.
 // Panics if n <= 0.
 func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U] {
 	return mapStage("Map", ctx, n, f, true)
@@ -35,9 +38,10 @@ func MapUnordered[T, U any](ctx context.Context, n int, f func(context.Context, 
 
 // ForEach returns a terminal stage that calls f for each element, up to n
 // calls at once, and returns the first error to occur — a call's own, or
-// ctx.Err() — or nil once every call has succeeded. On an error the
-// remaining calls are cancelled through their context and joined before
-// it returns. ⚠ Starts up to n goroutines, all joined before it returns.
+// ctx.Err() — or nil once every call has succeeded. "First" is first in
+// time, not in source order. A done ctx is an error even if every call
+// that ran succeeded. On an error the remaining calls are cancelled
+// through their context and joined before it returns. ⚠ Starts up to n goroutines, all joined before it returns.
 // ⚠ Full drain on success. Panics if n <= 0.
 func ForEach[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Seq[T]) error {
 	stage := mapStage("ForEach", ctx, n, func(ctx context.Context, v T) (struct{}, error) {
@@ -69,39 +73,30 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 		return func(yield func(U, error) bool) {
 			cctx, cancel := context.WithCancel(ctx)
 			var wg sync.WaitGroup
-			halt := func() { cancel(); wg.Wait() } // idempotent
-			defer halt()                           // joined on every exit, panics included
+			w := newWindow[U](n, ordered)
 
-			// slots is a ring of the outstanding calls, oldest at head:
-			// slots[(head+i)%n] is where the i-th of them delivers. In
-			// order, each has its own channel, so the head is always
-			// the oldest call. Unordered, they all share one, so the
-			// head is whichever call finishes first. Either way a
-			// worker's one send finds room and never blocks.
-			slots := make([]chan result[U], n)
-			if ordered {
-				for i := range slots {
-					slots[i] = make(chan result[U], 1)
+			// halt cancels the outstanding calls and joins them. It
+			// takes their results rather than only waiting, because a
+			// call may be blocked handing its result over; a panic
+			// among them is kept for the end. Idempotent.
+			var crash any
+			halt := func() {
+				cancel()
+				for w.size > 0 {
+					if r := w.take(); crash == nil {
+						crash = r.crash
+					}
 				}
-			} else {
-				shared := make(chan result[U], n)
-				for i := range slots {
-					slots[i] = shared
-				}
+				wg.Wait()
 			}
-			head, size := 0, 0
-			take := func() result[U] {
-				r := <-slots[head]
-				head, size = (head+1)%n, size-1
-				return r
-			}
+			defer halt() // joined on every exit, panics included
 
 			var cause error // the parent context's error, once seen
 			stopped := false
 
-			// emit delivers the head result; false means stop.
+			// emit delivers the next result; false means stop.
 			emit := func() bool {
-				r := take()
+				r := w.take()
 				if r.crash != nil {
 					halt() // join before the panic unwinds the source
 					panic(r.crash)
@@ -111,11 +106,15 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 				if cause = ctx.Err(); cause != nil {
 					return false
 				}
-				if !yield(r.u, r.err) {
-					stopped = true
-					return false
-				}
-				return true
+				returned := false
+				defer func() {
+					if !returned {
+						halt() // the consumer panicked: join before it unwinds the source
+					}
+				}()
+				stopped = !yield(r.u, r.err)
+				returned = true
+				return !stopped
 			}
 
 			s.Seq()(func(v T) bool {
@@ -123,8 +122,7 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 					halt()
 					return false
 				}
-				out := slots[(head+size)%n]
-				size++
+				out := w.reserve()
 				wg.Go(func() {
 					var r result[U]
 					defer func() { out <- r }() // on return, panic and Goexit
@@ -136,10 +134,10 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 						r.err = err
 					})
 				})
-				// A full window must give up its head before another
+				// A full window must give up a result before another
 				// element is taken; beyond that, hand over whatever
 				// has already finished rather than hold it.
-				for size == n || (size > 0 && len(slots[head]) > 0) {
+				for w.size == n || (w.size > 0 && w.ready()) {
 					if !emit() {
 						halt() // join before the source unwinds
 						return false
@@ -147,14 +145,12 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 				}
 				return true
 			})
-			for size > 0 && !stopped && cause == nil {
+			for w.size > 0 && !stopped && cause == nil {
 				emit()
 			}
 			halt()
-			for size > 0 { // a call that panicked is never swallowed
-				if r := take(); r.crash != nil {
-					panic(r.crash)
-				}
+			if crash != nil { // a call that panicked is never swallowed
+				panic(crash)
 			}
 			if cause != nil {
 				var zero U
@@ -162,4 +158,103 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 			}
 		}
 	}
+}
+
+// window holds the outstanding calls of one iteration: those started
+// whose results the consumer has not yet taken. Only the consumer's
+// goroutine touches it; a worker's whole contact is one send on the
+// channel reserve gave it.
+//
+// In order, the next result is the oldest call's, so each call gets a
+// channel of its own, in a queue: its one send always finds room.
+// Unordered, it is whichever call finishes first, so they share one.
+//
+// Nothing here is sized by n. The queue grows with the calls actually
+// outstanding, and the shared channel is capped, so a large n costs
+// nothing until it is used. Beyond the cap a finished call waits to hand
+// its result over — still one of the n in flight, as it would be anyway
+// until the consumer took the result.
+type window[U any] struct {
+	ordered bool
+	size    int                  // outstanding calls
+	slots   fifo[chan result[U]] // ordered: one per outstanding call, oldest first
+	spare   []chan result[U]     // ordered: channels to reuse
+	shared  chan result[U]       // unordered
+}
+
+// sharedCap bounds the unordered results buffered ahead of the consumer.
+const sharedCap = 256
+
+func newWindow[U any](n int, ordered bool) *window[U] {
+	w := &window[U]{ordered: ordered}
+	if !ordered {
+		w.shared = make(chan result[U], min(n, sharedCap))
+	}
+	return w
+}
+
+// reserve makes room for one more call and returns where it must send
+// its result, exactly once.
+func (w *window[U]) reserve() chan<- result[U] {
+	w.size++
+	if !w.ordered {
+		return w.shared
+	}
+	var ch chan result[U]
+	if n := len(w.spare); n > 0 {
+		ch, w.spare = w.spare[n-1], w.spare[:n-1]
+	} else {
+		ch = make(chan result[U], 1)
+	}
+	w.slots.push(ch)
+	return ch
+}
+
+// ready reports whether take would return without waiting.
+func (w *window[U]) ready() bool {
+	if w.ordered {
+		return len(w.slots.peek()) > 0
+	}
+	return len(w.shared) > 0
+}
+
+// take returns the next result, waiting for it if it must. There must be
+// an outstanding call.
+func (w *window[U]) take() result[U] {
+	w.size--
+	if !w.ordered {
+		return <-w.shared
+	}
+	ch := w.slots.pop()
+	r := <-ch
+	w.spare = append(w.spare, ch)
+	return r
+}
+
+// fifo is a queue that reuses its storage: popping moves a cursor, and the
+// live elements are moved down once the dead prefix is at least as long,
+// so the backing array stays proportional to the most elements ever held
+// at once rather than to the number ever pushed.
+type fifo[E any] struct {
+	items []E
+	head  int
+}
+
+func (q *fifo[E]) len() int { return len(q.items) - q.head }
+
+func (q *fifo[E]) push(e E) { q.items = append(q.items, e) }
+
+func (q *fifo[E]) peek() E { return q.items[q.head] }
+
+func (q *fifo[E]) pop() E {
+	e := q.items[q.head]
+	var zero E
+	q.items[q.head] = zero // let go of what it held
+	q.head++
+	if q.head*2 >= len(q.items) {
+		n := copy(q.items, q.items[q.head:])
+		clear(q.items[n:])
+		q.items, q.head = q.items[:n], 0
+	}
+	return e
 }

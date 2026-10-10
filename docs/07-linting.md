@@ -23,7 +23,7 @@ module.
 | Check | Reports | Suggests |
 |---|---|---|
 | `catenatopn` | `Sorted(s).Take(n)`, `s.SortedBy(sel).Take(n)` and their `Desc` forms | `BottomN`, `BottomNBy`, `TopN`, `TopNBy` |
-| `catenaminmax` | `Sorted(s).First()`, `.Last()`, `s.SortedBy(sel).First()`, `s.SortedWith(cmp).First()` | `Min`, `Max`, `MinBy`, `MaxBy`, `MinWith` |
+| `catenaminmax` | `Sorted(s).First()`, `s.SortedBy(sel).First()`, `s.SortedWith(cmp).First()`, and `Sorted(s).Last()` over integers and strings | `Min`, `Max`, `MinBy`, `MaxBy`, `MinWith` |
 | `catenadedupe` | `Distinct(Sorted(s))` | `Dedupe` |
 | `catenatally` | `for _, bucket := range s.GroupBy(sel)` where the loop only uses `len(bucket)` | `TallyBy` |
 | `catenaunusedseq` | a `Seq`, `Seq2` or `Try` built as a statement and discarded | — |
@@ -57,8 +57,15 @@ get. Where that does not hold it reports without fixing, or stays silent:
   puts the earliest of several equal keys first, and that is the one
   `MinBy` returns. `s.SortedBy(sel).Last()` is not reported at all — it
   is the *latest* of the equal keys, and `MaxBy` returns the earliest.
+- `Sorted(s).Last()` is fixed to `Max(s)` for integers and strings, where
+  two equal elements are the same value. For floats they need not be —
+  `-0 == +0` — so there it is not reported.
 - `catenatally` recognises one shape and no others. A `GroupBy` stored in
   a variable, passed along, or whose buckets are read is left alone.
+
+These equivalences are not taken on trust: a property test in the library
+compares each rewritten form with its original, bit for bit, over inputs
+chosen to contain ties, signed zeros and NaNs.
 
 So a clean run is not a proof that nothing is wasteful. It means none of
 the shapes the linter can be sure about are present.

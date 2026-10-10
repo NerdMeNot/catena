@@ -42,7 +42,7 @@ a warning.
 | `DistinctWith` | [S] ⚠ mem distinct; O(n²) compares — small inputs |
 | `Reversed` | ⚠ mem all, ⚠∞ |
 | `Once` | panics on second consumption — a development guard |
-| `MergeSortedWith(cmp, others...)` | lazy merge of already-sorted inputs; holds one element per input; inputs via `iter.Pull` |
+| `MergeSortedWith(cmp, others...)` | lazy merge of already-sorted inputs; holds one element of each of `others`, which are consumed via `iter.Pull` — put the longest input first |
 | `Then(f)` | returns `f(s)` — chains package functions and `par` stages |
 | `UntilDone(ctx)` | → `Try`; yields ctx.Err() and stops on cancellation |
 
@@ -63,7 +63,7 @@ a warning.
 | `SortedBy`, `SortedByDesc` | ⚠ mem all, ⚠∞; stable; sel once per element |
 | `JoinBy` | inner hash join; ⚠ mem right side, buffered before first emission |
 | `LeftJoinBy` | left outer join: an unmatched left element is kept, and `combine` is told; ⚠ mem right side |
-| `GroupJoinBy` | one output per left element, with all its matches together; ⚠ mem right side |
+| `GroupJoinBy` | one output per left element, with all its matches together (shared elements — do not assign to them); ⚠ mem right side |
 
 ## Consumption and search terminals (`seq_terminal.go`)
 

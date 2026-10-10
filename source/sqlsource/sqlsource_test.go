@@ -126,6 +126,23 @@ func TestRows(t *testing.T) {
 		})
 	})
 
+	t.Run("a panic in scan closes", func(t *testing.T) {
+		lifecycle(t, 1, 1, func() {
+			defer func() { _ = recover() }()
+			sqlsource.Rows(
+				func() (*sql.Rows, error) { return db.Query("5") },
+				func(*sql.Rows) (int, error) { panic("scan boom") },
+			).Collect()
+		})
+	})
+
+	t.Run("a panic downstream closes", func(t *testing.T) {
+		lifecycle(t, 1, 1, func() {
+			defer func() { _ = recover() }()
+			ints(db, "5").ForEach(func(int) error { panic("downstream boom") })
+		})
+	})
+
 	t.Run("open failure is the only element", func(t *testing.T) {
 		lifecycle(t, 1, 0, func() {
 			vals, errs := ints(db, "fail").CollectAll()

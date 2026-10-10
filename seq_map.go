@@ -303,9 +303,10 @@ func (s Seq[T]) LeftJoinBy[U any, K comparable, R any](
 // GroupJoinBy pairs each element of s with all the elements of other
 // sharing its key, yielding combine exactly once per left element — the
 // one-to-many join that keeps the many together. matches is in right
-// encounter order and nil when nothing matches. It is shared by every left
-// element with that key: retain it freely, but do not modify it. ⚠ Buffers
-// all of other before the first emission.
+// encounter order and nil when nothing matches. Its elements are shared by
+// every left element with that key: retain it and append to it freely, but
+// do not assign to its elements. ⚠ Buffers all of other before the first
+// emission.
 func (s Seq[T]) GroupJoinBy[U any, K comparable, R any](
 	other Seq[U],
 	leftKey func(T) K, rightKey func(U) K,
@@ -319,7 +320,10 @@ func (s Seq[T]) GroupJoinBy[U any, K comparable, R any](
 			return true
 		})
 		src(s)(func(v T) bool {
-			return yield(combine(v, right[leftKey(v)]))
+			// Capacity clipped to length, so that appending to one
+			// left element's matches cannot write into another's.
+			us := right[leftKey(v)]
+			return yield(combine(v, us[:len(us):len(us)]))
 		})
 	}
 }

@@ -344,3 +344,105 @@ func BenchmarkThreeWay_Distinct_RawGeneric(b *testing.B) {
 		benchSink = n
 	}
 }
+
+// ---- The 1.5 operators against the loop each one replaces ----
+
+// MergeSorted pulls every input through iter.Pull, as Zip does, so its
+// cost per element is the coroutine switch — the same known, priced cost
+// BenchmarkZip_PullCost measures — not the comparison.
+func BenchmarkMergeSorted_Hand(b *testing.B) {
+	evens, odds := sortedHalves()
+	b.ReportAllocs()
+	for b.Loop() {
+		n, i, j := 0, 0, 0
+		for i < len(evens) || j < len(odds) {
+			if j == len(odds) || (i < len(evens) && evens[i] <= odds[j]) {
+				n += evens[i]
+				i++
+			} else {
+				n += odds[j]
+				j++
+			}
+		}
+		benchSink = n
+	}
+}
+
+func BenchmarkMergeSorted_Catena(b *testing.B) {
+	evens, odds := sortedHalves()
+	merged := catena.MergeSorted(catena.FromSlice(evens), catena.FromSlice(odds))
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for v := range merged {
+			n += v
+		}
+		benchSink = n
+	}
+}
+
+func sortedHalves() (evens, odds []int) {
+	for i := range len(benchData) / 2 {
+		evens = append(evens, 2*i)
+		odds = append(odds, 2*i+1)
+	}
+	return evens, odds
+}
+
+// FoldedBy against the ordered grouped fold written by hand, and against
+// FoldBy, whose map it trades for an index and two slices.
+func BenchmarkFoldedBy_Hand(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		index := make(map[int]int)
+		var keys, sums []int
+		for _, v := range benchData {
+			k := v % 64
+			i, ok := index[k]
+			if !ok {
+				i = len(keys)
+				index[k] = i
+				keys = append(keys, k)
+				sums = append(sums, 0)
+			}
+			sums[i] += v
+		}
+		n := 0
+		for i, k := range keys {
+			n += k + sums[i]
+		}
+		benchSink = n
+	}
+}
+
+func BenchmarkFoldedBy_Catena(b *testing.B) {
+	s := catena.FromSlice(benchData)
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for k, sum := range s.FoldedBy(
+			func(v int) int { return v % 64 },
+			func(int) int { return 0 },
+			func(a, v int) int { return a + v },
+		) {
+			n += k + sum
+		}
+		benchSink = n
+	}
+}
+
+func BenchmarkFoldedBy_FoldBy(b *testing.B) {
+	s := catena.FromSlice(benchData)
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for k, sum := range s.FoldBy(
+			func(v int) int { return v % 64 },
+			func(int) int { return 0 },
+			func(a, v int) int { return a + v },
+		) {
+			n += k + sum
+		}
+		benchSink = n
+	}
+}

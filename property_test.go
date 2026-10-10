@@ -4,7 +4,9 @@ package catena_test
 // conformance suite.
 
 import (
+	"cmp"
 	"maps"
+	"math"
 	"slices"
 	"testing"
 
@@ -289,4 +291,129 @@ func TestPropFoldedByAgreesWithFoldBy(t *testing.T) {
 			t.Fatalf("%v vs %v", lazy, eager)
 		}
 	})
+}
+
+// The linter rewrites one spelling into another and promises the same
+// values — including which of several equal elements comes back. These
+// are those promises, checked bit for bit over floats, where equal does
+// not mean identical: -0 == +0, and NaN sorts below everything.
+func genFloats(t *rapid.T) []float64 {
+	special := []float64{0, math.Copysign(0, -1), math.NaN(), 1, -1, 2}
+	return rapid.SliceOfN(rapid.SampledFrom(special), 0, 12).Draw(t, "xs")
+}
+
+func sameFloats(a, b []float64) bool {
+	return slices.EqualFunc(a, b, func(x, y float64) bool { return math.Float64bits(x) == math.Float64bits(y) })
+}
+
+func sameFloat(a float64, aok bool, b float64, bok bool) bool {
+	return aok == bok && math.Float64bits(a) == math.Float64bits(b)
+}
+
+func TestPropLintFixesPreserveValues(t *testing.T) {
+	type keyed struct {
+		key float64
+		id  int
+	}
+	rapid.Check(t, func(t *rapid.T) {
+		xs := genFloats(t)
+		n := rapid.IntRange(0, 6).Draw(t, "n")
+		s := catena.FromSlice(xs)
+
+		// catenatopn
+		if a, b := catena.SortedDesc(s).Take(n).Collect(), catena.TopN(s, n); !sameFloats(a, b) {
+			t.Fatalf("SortedDesc.Take %v vs TopN %v", a, b)
+		}
+		if a, b := catena.Sorted(s).Take(n).Collect(), catena.BottomN(s, n); !sameFloats(a, b) {
+			t.Fatalf("Sorted.Take %v vs BottomN %v", a, b)
+		}
+
+		// catenaminmax, the First forms
+		a, aok := catena.Sorted(s).First()
+		b, bok := catena.Min(s)
+		if !sameFloat(a, aok, b, bok) {
+			t.Fatalf("Sorted.First %v vs Min %v over %v", a, b, xs)
+		}
+		a, aok = catena.SortedDesc(s).First()
+		b, bok = catena.Max(s)
+		if !sameFloat(a, aok, b, bok) {
+			t.Fatalf("SortedDesc.First %v vs Max %v over %v", a, b, xs)
+		}
+
+		// catenadedupe
+		if a, b := catena.Distinct(catena.Sorted(s)).Collect(), catena.Dedupe(catena.Sorted(s)).Collect(); !sameFloats(a, b) {
+			t.Fatalf("Distinct %v vs Dedupe %v", a, b)
+		}
+
+		// The By and With forms, where the element is more than its key.
+		var ks []keyed
+		for i, x := range xs {
+			ks = append(ks, keyed{x, i})
+		}
+		k := catena.FromSlice(ks)
+		key := func(e keyed) float64 { return e.key }
+		byKey := func(a, b keyed) int { return cmp.Compare(a.key, b.key) }
+		ids := func(es []keyed) []int {
+			return catena.FromSlice(es).Map(func(e keyed) int { return e.id }).Collect()
+		}
+		if a, b := ids(k.SortedByDesc(key).Take(n).Collect()), ids(k.TopNBy(n, key)); !slices.Equal(a, b) {
+			t.Fatalf("SortedByDesc.Take %v vs TopNBy %v", a, b)
+		}
+		if a, b := ids(k.SortedBy(key).Take(n).Collect()), ids(k.BottomNBy(n, key)); !slices.Equal(a, b) {
+			t.Fatalf("SortedBy.Take %v vs BottomNBy %v", a, b)
+		}
+		e1, ok1 := k.SortedBy(key).First()
+		e2, ok2 := k.MinBy(key)
+		if ok1 != ok2 || e1.id != e2.id {
+			t.Fatalf("SortedBy.First %v vs MinBy %v", e1, e2)
+		}
+		e1, ok1 = k.SortedByDesc(key).First()
+		e2, ok2 = k.MaxBy(key)
+		if ok1 != ok2 || e1.id != e2.id {
+			t.Fatalf("SortedByDesc.First %v vs MaxBy %v", e1, e2)
+		}
+		e1, ok1 = k.SortedWith(byKey).First()
+		e2, ok2 = k.MinWith(byKey)
+		if ok1 != ok2 || e1.id != e2.id {
+			t.Fatalf("SortedWith.First %v vs MinWith %v", e1, e2)
+		}
+	})
+}
+
+// For integers and strings equal means identical, so the Last forms are
+// rewritten too.
+func TestPropLintFixesLastForExactTypes(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		xs := rapid.SliceOfN(rapid.IntRange(-3, 3), 0, 12).Draw(t, "xs")
+		ws := rapid.SliceOfN(rapid.SampledFrom([]string{"", "a", "b", "ab"}), 0, 12).Draw(t, "ws")
+		s, w := catena.FromSlice(xs), catena.FromSlice(ws)
+
+		a, aok := catena.Sorted(s).Last()
+		b, bok := catena.Max(s)
+		if a != b || aok != bok {
+			t.Fatalf("Sorted.Last %v vs Max %v", a, b)
+		}
+		a, aok = catena.SortedDesc(s).Last()
+		b, bok = catena.Min(s)
+		if a != b || aok != bok {
+			t.Fatalf("SortedDesc.Last %v vs Min %v", a, b)
+		}
+		c, cok := catena.Sorted(w).Last()
+		d, dok := catena.Max(w)
+		if c != d || cok != dok {
+			t.Fatalf("Sorted.Last %q vs Max %q", c, d)
+		}
+	})
+}
+
+// The Last forms are what the linter must NOT rewrite for floats: a
+// stable sort leaves the latest of several equal elements last, and Max
+// returns the earliest.
+func TestSortedLastIsNotMaxForFloats(t *testing.T) {
+	xs := catena.Of(0.0, math.Copysign(0, -1))
+	last, _ := catena.Sorted(xs).Last()
+	max, _ := catena.Max(xs)
+	if math.Signbit(last) == math.Signbit(max) {
+		t.Fatalf("Sorted.Last=%v and Max=%v agree; the linter's float exemption is no longer needed", last, max)
+	}
 }

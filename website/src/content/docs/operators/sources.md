@@ -55,7 +55,7 @@ Holds one page in memory
 :::
 
 :::caution
-A source that always reports another page is infinite
+A source that always reports another page is infinite, and one that reports empty pages without end never yields, so nothing downstream — not even Take — can stop it: bound that in fetch
 :::
 
 ```go

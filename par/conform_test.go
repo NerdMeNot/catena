@@ -15,10 +15,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -193,19 +195,27 @@ func sortPairs(ps []pair) []pair {
 // iterations begun, cleanups run and elements produced, records which
 // goroutines called it, and can pause or panic at a given element.
 type source struct {
-	n        int // elements, or -1 for infinite
-	panicAt  int // element at which to panic, or 0 for never
-	delay    func(i int) time.Duration
-	starts   atomic.Int64
-	cleanups atomic.Int64
-	produced atomic.Int64
-	goids    atomic.Value // []int, appended under the single-producer rule
+	n           int    // elements, or -1 for infinite
+	panicAt     int    // element at which to panic, or 0 for never
+	goexitAt    int    // element at which to call runtime.Goexit, or 0
+	panicOnStop bool   // panic when told to stop, as a failing cleanup would
+	onCleanup   func() // called as the iteration unwinds
+	delay       func(i int) time.Duration
+	starts      atomic.Int64
+	cleanups    atomic.Int64
+	produced    atomic.Int64
+	goids       atomic.Value // []int, appended under the single-producer rule
 }
 
 func (src *source) seq() catena.Seq[int] {
 	return func(yield func(int) bool) {
 		src.starts.Add(1)
 		defer src.cleanups.Add(1)
+		defer func() {
+			if src.onCleanup != nil {
+				src.onCleanup()
+			}
+		}()
 		ids, _ := src.goids.Load().([]int)
 		src.goids.Store(append(slices.Clone(ids), goid()))
 		for i := 0; src.n < 0 || i < src.n; i++ {
@@ -215,8 +225,14 @@ func (src *source) seq() catena.Seq[int] {
 			if src.panicAt != 0 && i == src.panicAt {
 				panic("source boom")
 			}
+			if src.goexitAt != 0 && i == src.goexitAt {
+				runtime.Goexit()
+			}
 			src.produced.Add(1)
 			if !yield(i) {
+				if src.panicOnStop {
+					panic("stop boom")
+				}
 				return
 			}
 		}
@@ -583,6 +599,163 @@ func conformMap(t *testing.T, c mapOp) {
 		}
 	})
 
+	// The package promises more than "joined before the iteration
+	// returns": the calls are joined before the SOURCE unwinds, so a
+	// source's cleanup never runs while callbacks are still using what
+	// it is about to release. Checked at the moment that cleanup runs.
+	for name, consume := range map[string]func(stage catena.Try[int], cancel func()){
+		"break": func(stage catena.Try[int], _ func()) {
+			for range stage {
+				break
+			}
+		},
+		"consumer_panic": func(stage catena.Try[int], _ func()) {
+			defer func() { _ = recover() }()
+			for range stage {
+				panic("consumer boom")
+			}
+		},
+		"cancel": func(stage catena.Try[int], cancel func()) {
+			for range stage {
+				cancel()
+			}
+		},
+		"callback_panic": func(stage catena.Try[int], _ func()) {
+			defer func() { _ = recover() }()
+			for _, err := range stage {
+				_ = err
+			}
+		},
+	} {
+		bubble(t, "joined_before_the_source_unwinds/"+name, func(t *testing.T) {
+			cctx, cancel := context.WithCancel(ctx())
+			defer cancel()
+			var p probe
+			joinedAtCleanup, cleaned := false, false
+			src := source{n: -1, onCleanup: func() { joinedAtCleanup, cleaned = p.joined(), true }}
+			f := p.wrap(func(ctx context.Context, v int) (int, error) {
+				switch {
+				case v == 0:
+					return v, nil
+				case v == 1 && name == "callback_panic":
+					panic("callback boom")
+				}
+				return lingering(ctx, v)
+			})
+			consume(c.build(cctx, 4, f)(src.seq()), cancel)
+			if !cleaned || !joinedAtCleanup {
+				t.Fatalf("source cleanup ran=%v with every call joined=%v", cleaned, joinedAtCleanup)
+			}
+		})
+	}
+
+	bubble(t, "result_waits_for_the_source", func(t *testing.T) {
+		// The documented cost of running the source on the consumer's
+		// goroutine: a call that finished at 1s is delivered at 10s,
+		// when the source next yields. Cancellation is seen then too.
+		slowSource := func() catena.Seq[int] {
+			src := &source{n: 2, delay: func(i int) time.Duration { return time.Duration(i) * 10 * time.Second }}
+			return src.seq()
+		}
+		quick := func(_ context.Context, v int) (int, error) {
+			time.Sleep(time.Second)
+			return v, nil
+		}
+		begin := time.Now()
+		var at []time.Duration
+		for range c.build(ctx(), 4, quick)(slowSource()) {
+			at = append(at, time.Since(begin))
+		}
+		if !slices.Equal(at, []time.Duration{10 * time.Second, 11 * time.Second}) {
+			t.Fatalf("results delivered at %v", at)
+		}
+
+		cctx, cancel := context.WithCancel(ctx())
+		go func() {
+			time.Sleep(5 * time.Second)
+			cancel()
+		}()
+		begin = time.Now()
+		_, err := c.build(cctx, 4, quick)(slowSource()).Collect()
+		if !errors.Is(err, context.Canceled) || time.Since(begin) != 10*time.Second {
+			t.Fatalf("err=%v after %v", err, time.Since(begin))
+		}
+	})
+
+	bubble(t, "iterated_concurrently", func(t *testing.T) {
+		// All state belongs to one iteration, so one stage value can be
+		// iterated from several goroutines at once.
+		stage := c.build(ctx(), 3, scrambled)(catena.FromSlice(conformInputs[4]))
+		want := sortPairs(modelScrambled(conformInputs[4]))
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Go(func() {
+				if got := sortPairs(collectPairs(stage)); !slices.Equal(got, want) {
+					t.Errorf("got %v, want %v", got, want)
+				}
+			})
+		}
+		wg.Wait()
+	})
+
+	bubble(t, "window_wider_than_the_result_buffer", func(t *testing.T) {
+		// Far more calls in flight than the stage buffers results for:
+		// finished calls queue to hand theirs over. The output is still
+		// the model's, and stopping still joins every one of them.
+		const n = 5000
+		in := catena.Range(0, 3*n, 1).Collect()
+		var p probe
+		together := p.wrap(func(ctx context.Context, v int) (int, error) {
+			time.Sleep(time.Second) // a whole window finishes at once
+			return scrambled(ctx, v)
+		})
+		got := collectPairs(c.build(ctx(), n, together)(catena.FromSlice(in)))
+		want := modelScrambled(in)
+		if !c.ordered {
+			got, want = sortPairs(got), sortPairs(want)
+		}
+		if !slices.Equal(got, want) || p.max.Load() != n {
+			t.Fatalf("%d results, %d at once", len(got), p.max.Load())
+		}
+
+		// And a break with the window full: one call returns, the other
+		// n-1 are cancelled, and all of those finish together too.
+		var q probe
+		src := source{n: -1}
+		f := q.wrap(func(ctx context.Context, v int) (int, error) {
+			if v == 0 {
+				time.Sleep(time.Second)
+				return 0, nil
+			}
+			return lingering(ctx, v)
+		})
+		for range c.build(ctx(), n, f)(src.seq()) {
+			break
+		}
+		if !q.joined() || q.started.Load() != n || q.cancelled.Load() != n-1 {
+			t.Fatalf("joined=%v, %d calls started, %d saw cancellation", q.joined(), q.started.Load(), q.cancelled.Load())
+		}
+	})
+
+	t.Run("n_costs_nothing_until_used", func(t *testing.T) {
+		// n bounds the calls in flight; it is not a size to allocate.
+		// The largest int there is must work, and cost what 4 costs.
+		instant := func(_ context.Context, v int) (int, error) { return v, nil }
+		in := catena.Of(1, 2, 3)
+		got, err := c.build(ctx(), math.MaxInt, instant)(in).Collect()
+		slices.Sort(got)
+		if err != nil || !slices.Equal(got, []int{1, 2, 3}) {
+			t.Fatalf("got %v, %v", got, err)
+		}
+		allocs := func(n int) float64 {
+			stage := c.build(ctx(), n, instant)(in)
+			return testing.AllocsPerRun(50, func() { stage.Ignore().Drain() })
+		}
+		if small, huge := allocs(4), allocs(1<<40); huge > small+2 {
+			t.Fatalf("n=4 allocates %.0f per iteration, n=2^40 allocates %.0f", small, huge)
+		}
+	})
+
 	bubble(t, "P12_source_panic", func(t *testing.T) {
 		var p probe
 		src := source{n: 10, panicAt: 3}
@@ -644,6 +817,38 @@ func TestForEach(t *testing.T) {
 		// The failing call's error, not a sibling's cancellation.
 		if !errors.Is(err, errBoom) || !p.joined() || !src.clean() {
 			t.Fatalf("err=%v joined=%v clean=%v", err, p.joined(), src.clean())
+		}
+	})
+
+	bubble(t, "first_error_to_occur_wins", func(t *testing.T) {
+		errSlow, errFast := errors.New("slow"), errors.New("fast")
+		err := catena.Of(1, 2).Then(par.ForEach(ctx, 2, func(ctx context.Context, v int) error {
+			if v == 1 {
+				time.Sleep(2 * time.Second) // fails later, and ignores its context
+				return errSlow
+			}
+			time.Sleep(time.Second)
+			return errFast
+		}))
+		// Not the first in source order: the first in time.
+		if !errors.Is(err, errFast) {
+			t.Fatalf("err=%v", err)
+		}
+	})
+
+	bubble(t, "cancelled_before_the_last_result_is_taken", func(t *testing.T) {
+		// Every call succeeded, but the context was done before the
+		// stage had taken the last result: that is still a cancelled
+		// run, and ForEach says so.
+		cctx, cancel := context.WithCancel(ctx)
+		err := catena.Of(1, 2, 3).Then(par.ForEach(cctx, 3, func(_ context.Context, v int) error {
+			if v == 3 {
+				cancel()
+			}
+			return nil
+		}))
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err=%v", err)
 		}
 	})
 
@@ -749,6 +954,44 @@ func conformStage(t *testing.T, c stageOp) {
 		}
 	})
 
+	bubble(t, "P12_source_goexit", func(t *testing.T) {
+		src := source{n: 10, goexitAt: 2}
+		v := mustPanic(t, func() { c.op(src.seq()).Drain() })
+		if err, ok := v.(error); !ok || !strings.Contains(err.Error(), "runtime.Goexit") {
+			t.Fatalf("recovered %v", v)
+		}
+	})
+
+	bubble(t, "P12_panic_while_stopping", func(t *testing.T) {
+		// A source that panics only on being told to stop — a cleanup
+		// that fails — panics after the consumer has stopped listening.
+		// It is still not swallowed.
+		src := source{n: -1, panicOnStop: true}
+		v := mustPanic(t, func() {
+			for range c.op(src.seq()) {
+				break
+			}
+		})
+		if v != "stop boom" || !src.clean() {
+			t.Fatalf("recovered %v, clean=%v", v, src.clean())
+		}
+	})
+
+	bubble(t, "consumer_panic_joins_and_wins", func(t *testing.T) {
+		// The consumer's own panic is the one that propagates, even
+		// when stopping the source makes it panic too — and the source
+		// has returned by then.
+		src := source{n: -1, panicOnStop: true}
+		v := mustPanic(t, func() {
+			for range c.op(src.seq()) {
+				panic("consumer boom")
+			}
+		})
+		if v != "consumer boom" || !src.clean() {
+			t.Fatalf("recovered %v, clean=%v", v, src.clean())
+		}
+	})
+
 	bubble(t, "P13_single_consumption", func(t *testing.T) {
 		if got := c.op(singleUse(5)).Collect(); !slices.Equal(got, c.model([]int{0, 1, 2, 3, 4})) {
 			t.Fatalf("got %v", got)
@@ -815,6 +1058,33 @@ func TestMerge(t *testing.T) {
 		got := par.Merge(slow(), slow(), slow()).Collect()
 		if len(got) != 12 || time.Since(begin) != 4*time.Second {
 			t.Fatalf("%d elements in %v", len(got), time.Since(begin))
+		}
+	})
+
+	bubble(t, "each_source_keeps_its_order_and_runs_one_ahead", func(t *testing.T) {
+		const k = 7
+		srcs := []*source{{n: -1}, {n: -1}, {n: -1}}
+		tagged := func(i int) catena.Seq[int] {
+			return srcs[i].seq().Map(func(v int) int { return v*10 + i })
+		}
+		last := []int{-1, -1, -1}
+		contributed := []int64{0, 0, 0}
+		yielded := 0
+		for v := range par.Merge(tagged(0), tagged(1), tagged(2)) {
+			from, seq := v%10, v/10
+			if seq != last[from]+1 {
+				t.Fatalf("source %d yielded %d after %d", from, seq, last[from])
+			}
+			last[from] = seq
+			contributed[from]++
+			if yielded++; yielded == k {
+				break
+			}
+		}
+		for i, src := range srcs {
+			if got := src.produced.Load(); got > contributed[i]+1 {
+				t.Fatalf("source %d contributed %d and produced %d", i, contributed[i], got)
+			}
 		}
 	})
 
