@@ -71,14 +71,14 @@ var stageOps = []stageOp{
 			return catena.FlattenSlices(s.Then(parallel.ChunkedWithin[int](3, time.Second)))
 		},
 		model: slices.Clone[[]int], // chunk then flatten is the identity
-		ahead: 2,                   // the rest of the chunk + one in the producer's hand
+		ahead: 5,                   // the rest of the chunk, n more buffered, one in the producer's hand
 	},
 	{
 		name:   "Merge",
 		covers: []string{"Merge"},
 		op:     func(s catena.Seq[int]) catena.Seq[int] { return parallel.Merge(s, nil) },
 		model:  slices.Clone[[]int], // one live input: its own order
-		ahead:  1,
+		ahead:  65,                  // the buffer, and one in the producer's hand
 	},
 }
 
@@ -355,6 +355,26 @@ func conformMap(t *testing.T, c mapOp) {
 					t.Fatal("source ran off the consumer's goroutine")
 				}
 			}
+		}
+	})
+
+	bubble(t, "source_that_ignores_being_stopped", func(t *testing.T) {
+		// A source is supposed to return when yield reports false. One
+		// that keeps calling anyway must find the stage closed: no
+		// further call started, no further yield, nothing left running.
+		var p probe
+		rude := catena.Seq[int](func(yield func(int) bool) {
+			for i := range 10 {
+				yield(i)
+			}
+		})
+		yields := 0
+		c.build(ctx(), 2, p.wrap(scrambled))(rude)(func(int, error) bool {
+			yields++
+			return false
+		})
+		if yields != 1 || !p.joined() || p.started.Load() > 2 {
+			t.Fatalf("%d yields, %d calls started, joined=%v", yields, p.started.Load(), p.joined())
 		}
 	})
 
@@ -1061,14 +1081,13 @@ func TestMerge(t *testing.T) {
 		}
 	})
 
-	bubble(t, "each_source_keeps_its_order_and_runs_one_ahead", func(t *testing.T) {
+	bubble(t, "each_source_keeps_its_order_and_the_buffer_bounds_them", func(t *testing.T) {
 		const k = 7
 		srcs := []*source{{n: -1}, {n: -1}, {n: -1}}
 		tagged := func(i int) catena.Seq[int] {
 			return srcs[i].seq().Map(func(v int) int { return v*10 + i })
 		}
 		last := []int{-1, -1, -1}
-		contributed := []int64{0, 0, 0}
 		yielded := 0
 		for v := range parallel.Merge(tagged(0), tagged(1), tagged(2)) {
 			from, seq := v%10, v/10
@@ -1076,15 +1095,18 @@ func TestMerge(t *testing.T) {
 				t.Fatalf("source %d yielded %d after %d", from, seq, last[from])
 			}
 			last[from] = seq
-			contributed[from]++
 			if yielded++; yielded == k {
 				break
 			}
 		}
-		for i, src := range srcs {
-			if got := src.produced.Load(); got > contributed[i]+1 {
-				t.Fatalf("source %d contributed %d and produced %d", i, contributed[i], got)
-			}
+		// Together: what was yielded, the buffer, and one in each
+		// source's hand.
+		var produced int64
+		for _, src := range srcs {
+			produced += src.produced.Load()
+		}
+		if produced > k+64+int64(len(srcs)) {
+			t.Fatalf("yielded %d and produced %d", k, produced)
 		}
 	})
 

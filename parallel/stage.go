@@ -36,12 +36,13 @@ func Buffer[T any](n int) func(catena.Seq[T]) catena.Seq[T] {
 // keep their order; the interleaving between sequences is whatever the
 // timing makes it. It ends when all have ended. ⚠ Starts one goroutine per
 // sequence, plus one, per iteration, all joined before it returns, so
-// stopping waits for every source's current step. ⚠ The sources run
-// concurrently with each other and with the consumer's loop body. Each
-// source runs at most one element ahead.
+// stopping waits for every source's current step. ⚠ Buffers up to 64
+// elements between the sources and the consumer, so together they run
+// that far ahead, plus one each. ⚠ The sources run concurrently with each
+// other and with the consumer's loop body.
 func Merge[T any](seqs ...catena.Seq[T]) catena.Seq[T] {
 	return func(yield func(T) bool) {
-		f := start(0, seqs...)
+		f := start(feedCap, seqs...)
 		defer f.stop() // if the consumer panics
 		for v := range f.ch {
 			if !yield(v) {
@@ -59,15 +60,15 @@ func Merge[T any](seqs ...catena.Seq[T]) catena.Seq[T] {
 // a silent source yields nothing. Every chunk is a fresh slice. T cannot
 // be inferred — write parallel.ChunkedWithin[int](100, time.Second). ⚠ Starts
 // one goroutine per iteration, joined before it returns, so stopping
-// waits for the source's current step. ⚠ Buffers up to n elements and
-// consumes at most one beyond those it holds. ⚠ Everything upstream runs
+// waits for the source's current step. ⚠ Holds up to n elements in the
+// chunk and runs the source up to another n ahead (64 at most), plus one. ⚠ Everything upstream runs
 // concurrently with the consumer's loop body. Panics if n <= 0 or d <= 0.
 func ChunkedWithin[T any](n int, d time.Duration) func(catena.Seq[T]) catena.Seq[[]T] {
 	posCheck("ChunkedWithin", "n", n)
 	posCheck("ChunkedWithin", "d", d)
 	return func(s catena.Seq[T]) catena.Seq[[]T] {
 		return func(yield func([]T) bool) {
-			f := start(0, s)
+			f := start(min(n, feedCap), s)
 			defer f.stop() // if the consumer panics
 			timer := time.NewTimer(d)
 			timer.Stop()
@@ -106,6 +107,12 @@ func ChunkedWithin[T any](n int, d time.Duration) func(catena.Seq[T]) catena.Seq
 		}
 	}
 }
+
+// feedCap bounds how far the sources of Merge and ChunkedWithin run ahead
+// of the consumer. Handing elements over one at a time, with nothing in
+// between, costs a goroutine switch each; a little room lets a fast
+// source and a fast consumer each keep running.
+const feedCap = 64
 
 // feed is the producer side of the stages that run their sources on
 // goroutines: every element of every source arrives on ch, which is
