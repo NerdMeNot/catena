@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/NerdMeNot/catena"
+	"github.com/NerdMeNot/catena/source/sqlsource"
 )
 
 // ---- minimal database/sql driver ----
@@ -92,7 +93,7 @@ type row struct {
 }
 
 func sqlRows(db *sql.DB, query string) catena.Try[row] {
-	return Rows(
+	return sqlsource.Rows(
 		func() (*sql.Rows, error) { return db.Query(query) },
 		func(rs *sql.Rows) (row, error) {
 			var r row
