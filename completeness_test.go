@@ -32,6 +32,8 @@ var dedicatedCovered = map[string]string{
 	"Integer": "TestRange",
 	"Version": "TestVersion + the release workflow's tag check",
 
+	"Seq.Sample": "sample_test.go: random, so tested for shape, repeatability and distribution",
+
 	// constructors
 	"Of":            "conformance inputs throughout",
 	"From":          "TestInteropSeqConversion",

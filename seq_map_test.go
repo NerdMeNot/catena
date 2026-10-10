@@ -368,3 +368,51 @@ func TestGroupJoinByMatches(t *testing.T) {
 		}
 	}
 }
+
+// modelDuplicates yields each value whose key repeats, once, at the
+// second element to have that key.
+func modelDuplicates(in []int, key func(int) int) []int {
+	count := map[int]int{}
+	var out []int
+	for _, v := range in {
+		k := key(v)
+		if count[k]++; count[k] == 2 {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func init() {
+	mod5 := func(v int) int { return ((v % 5) + 5) % 5 }
+	registerSeqOps([]seqOp{
+		{
+			name:    "DuplicatesBy",
+			covers:  []string{"DuplicatesBy"},
+			op:      func(s catena.Seq[int]) catena.Seq[int] { return s.DuplicatesBy(mod5) },
+			model:   func(in []int) []int { return modelDuplicates(in, mod5) },
+			panicOp: func(s catena.Seq[int]) catena.Seq[int] { return s.DuplicatesBy(panicky) },
+			alloc:   allocUnbounded,
+		},
+	}...)
+	registerTermOps([]termOp{
+		{
+			name:   "IsSortedBy",
+			covers: []string{"IsSortedBy"},
+			op:     func(s catena.Seq[int]) any { return s.IsSortedBy(func(v int) int { return v / 2 }) },
+			model: func(in []int) any {
+				return slices.IsSortedFunc(in, func(a, b int) int { return a/2 - b/2 })
+			},
+			infOp: func(s catena.Seq[int]) any { return s.IsSortedBy(func(v int) int { return -v }) },
+		},
+	}...)
+}
+
+func TestIsSortedByCallsSelectorOncePerElement(t *testing.T) {
+	calls := 0
+	sorted := catena.Of(1, 2, 3, 2, 9, 9).IsSortedBy(func(v int) int { calls++; return v })
+	// Stops at the first pair out of order: 3 then 2, the fourth element.
+	if sorted || calls != 4 {
+		t.Fatalf("sorted=%v after %d selector calls", sorted, calls)
+	}
+}

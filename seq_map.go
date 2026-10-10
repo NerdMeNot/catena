@@ -191,6 +191,49 @@ func (s Seq[T]) DedupeBy[K comparable](sel func(T) K) Seq[T] {
 	}
 }
 
+// DuplicatesBy yields the elements that repeat a key: for each key seen
+// more than once, the second element to have it, once. Order is the order
+// in which keys were first repeated. catena.Duplicates(s) is the
+// no-selector form, for a comparable T. ⚠ Retains one key per distinct
+// value — unbounded.
+func (s Seq[T]) DuplicatesBy[K comparable](sel func(T) K) Seq[T] {
+	return func(yield func(T) bool) {
+		reported := make(map[K]bool) // present: seen; true: already yielded
+		src(s)(func(v T) bool {
+			k := sel(v)
+			done, seen := reported[k]
+			if !seen {
+				reported[k] = false
+				return true
+			}
+			if done {
+				return true
+			}
+			reported[k] = true
+			return yield(v)
+		})
+	}
+}
+
+// IsSortedBy reports whether no element's key orders before its
+// predecessor's; an empty or one-element sequence is sorted. sel is
+// called once per element. It stops at the first pair out of order, so on
+// infinite input it returns only if there is one.
+func (s Seq[T]) IsSortedBy[K cmp.Ordered](sel func(T) K) bool {
+	var prev K
+	have, sorted := false, true
+	src(s)(func(v T) bool {
+		k := sel(v)
+		if have && cmp.Compare(prev, k) > 0 {
+			sorted = false
+			return false
+		}
+		prev, have = k, true
+		return true
+	})
+	return sorted
+}
+
 // sortedByKey is the shared decorate-sort-undecorate body behind SortedBy
 // and SortedByDesc: sel is called exactly once per element, not once per
 // comparison, at the price of one decorated buffer (the input is fully

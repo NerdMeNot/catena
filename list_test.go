@@ -10,6 +10,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"math/rand/v2"
 	"reflect"
 	"slices"
 	"testing"
@@ -243,18 +244,27 @@ var c15Cases = map[string]c15Case{
 		func(l List[int]) any { yes, no := l.Partition(evenL); return lpair{yes, no} },
 		func(s Seq[int]) any { yes, no := s.Partition(evenL); return lpair{yes, no} },
 	},
-	"MaxBy":     {func(l List[int]) any { v, ok := l.MaxBy(func(v int) int { return v % 3 }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MaxBy(func(v int) int { return v % 3 }); return lpair{v, ok} }},
-	"MinBy":     {func(l List[int]) any { v, ok := l.MinBy(func(v int) int { return v % 3 }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MinBy(func(v int) int { return v % 3 }); return lpair{v, ok} }},
-	"MaxOf":     {func(l List[int]) any { v, ok := l.MaxOf(func(v int) int { return -v }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MaxOf(func(v int) int { return -v }); return lpair{v, ok} }},
-	"MinOf":     {func(l List[int]) any { v, ok := l.MinOf(func(v int) int { return -v }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MinOf(func(v int) int { return -v }); return lpair{v, ok} }},
-	"MinMaxOf":  {func(l List[int]) any { a, b, ok := l.MinMaxOf(Self[int]); return [3]any{a, b, ok} }, func(s Seq[int]) any { a, b, ok := s.MinMaxOf(Self[int]); return [3]any{a, b, ok} }},
-	"MaxWith":   {func(l List[int]) any { v, ok := l.MaxWith(func(a, b int) int { return a - b }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MaxWith(func(a, b int) int { return a - b }); return lpair{v, ok} }},
-	"MinWith":   {func(l List[int]) any { v, ok := l.MinWith(func(a, b int) int { return a - b }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MinWith(func(a, b int) int { return a - b }); return lpair{v, ok} }},
-	"TopNBy":    {func(l List[int]) any { return l.TopNBy(3, Self[int]) }, func(s Seq[int]) any { return s.TopNBy(3, Self[int]) }},
-	"BottomNBy": {func(l List[int]) any { return l.BottomNBy(3, Self[int]) }, func(s Seq[int]) any { return s.BottomNBy(3, Self[int]) }},
-	"SumOf":     {func(l List[int]) any { return l.SumOf(func(v int) int { return v * 2 }) }, func(s Seq[int]) any { return s.SumOf(func(v int) int { return v * 2 }) }},
-	"ProductOf": {func(l List[int]) any { return l.ProductOf(func(v int) int { return v + 1 }) }, func(s Seq[int]) any { return s.ProductOf(func(v int) int { return v + 1 }) }},
-	"AverageOf": {func(l List[int]) any { a, ok := l.AverageOf(Self[int]); return lpair{a, ok} }, func(s Seq[int]) any { a, ok := s.AverageOf(Self[int]); return lpair{a, ok} }},
+	"MaxBy":    {func(l List[int]) any { v, ok := l.MaxBy(func(v int) int { return v % 3 }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MaxBy(func(v int) int { return v % 3 }); return lpair{v, ok} }},
+	"MinBy":    {func(l List[int]) any { v, ok := l.MinBy(func(v int) int { return v % 3 }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MinBy(func(v int) int { return v % 3 }); return lpair{v, ok} }},
+	"MaxOf":    {func(l List[int]) any { v, ok := l.MaxOf(func(v int) int { return -v }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MaxOf(func(v int) int { return -v }); return lpair{v, ok} }},
+	"MinOf":    {func(l List[int]) any { v, ok := l.MinOf(func(v int) int { return -v }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MinOf(func(v int) int { return -v }); return lpair{v, ok} }},
+	"MinMaxOf": {func(l List[int]) any { a, b, ok := l.MinMaxOf(Self[int]); return [3]any{a, b, ok} }, func(s Seq[int]) any { a, b, ok := s.MinMaxOf(Self[int]); return [3]any{a, b, ok} }},
+	"MaxWith":  {func(l List[int]) any { v, ok := l.MaxWith(func(a, b int) int { return a - b }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MaxWith(func(a, b int) int { return a - b }); return lpair{v, ok} }},
+	"MinWith":  {func(l List[int]) any { v, ok := l.MinWith(func(a, b int) int { return a - b }); return lpair{v, ok} }, func(s Seq[int]) any { v, ok := s.MinWith(func(a, b int) int { return a - b }); return lpair{v, ok} }},
+	"Sample": {
+		func(l List[int]) any { return l.Sample(3, rand.New(rand.NewPCG(1, 2))) },
+		func(s Seq[int]) any { return s.Sample(3, rand.New(rand.NewPCG(1, 2))) },
+	},
+	"FirstOr":      {func(l List[int]) any { return l.FirstOr(-1) }, func(s Seq[int]) any { return s.FirstOr(-1) }},
+	"LastOr":       {func(l List[int]) any { return l.LastOr(-1) }, func(s Seq[int]) any { return s.LastOr(-1) }},
+	"IsSortedWith": {func(l List[int]) any { return l.IsSortedWith(func(a, b int) int { return a - b }) }, func(s Seq[int]) any { return s.IsSortedWith(func(a, b int) int { return a - b }) }},
+	"IsSortedBy":   {func(l List[int]) any { return l.IsSortedBy(Self[int]) }, func(s Seq[int]) any { return s.IsSortedBy(Self[int]) }},
+	"DuplicatesBy": {func(l List[int]) any { return ints(l.DuplicatesBy(Self[int])) }, func(s Seq[int]) any { return s.DuplicatesBy(Self[int]).Collect() }},
+	"TopNBy":       {func(l List[int]) any { return l.TopNBy(3, Self[int]) }, func(s Seq[int]) any { return s.TopNBy(3, Self[int]) }},
+	"BottomNBy":    {func(l List[int]) any { return l.BottomNBy(3, Self[int]) }, func(s Seq[int]) any { return s.BottomNBy(3, Self[int]) }},
+	"SumOf":        {func(l List[int]) any { return l.SumOf(func(v int) int { return v * 2 }) }, func(s Seq[int]) any { return s.SumOf(func(v int) int { return v * 2 }) }},
+	"ProductOf":    {func(l List[int]) any { return l.ProductOf(func(v int) int { return v + 1 }) }, func(s Seq[int]) any { return s.ProductOf(func(v int) int { return v + 1 }) }},
+	"AverageOf":    {func(l List[int]) any { a, ok := l.AverageOf(Self[int]); return lpair{a, ok} }, func(s Seq[int]) any { a, ok := s.AverageOf(Self[int]); return lpair{a, ok} }},
 	"JoinToString": {
 		func(l List[int]) any {
 			return l.JoinToString(",", func(v int) string { return string(rune('a' + ((v%26)+26)%26)) })

@@ -7,7 +7,10 @@
 
 package catena
 
-import "cmp"
+import (
+	"cmp"
+	"math/rand/v2"
+)
 
 // Filter mirrors Seq.Filter eagerly.
 func (l List[T]) Filter(pred func(T) bool) List[T] {
@@ -191,6 +194,16 @@ func (l List[T]) DedupeBy[K comparable](sel func(T) K) List[T] {
 	return List[T](FromSlice([]T(l)).DedupeBy(sel).Collect())
 }
 
+// DuplicatesBy mirrors Seq.DuplicatesBy eagerly.
+func (l List[T]) DuplicatesBy[K comparable](sel func(T) K) List[T] {
+	return List[T](FromSlice([]T(l)).DuplicatesBy(sel).Collect())
+}
+
+// IsSortedBy mirrors Seq.IsSortedBy eagerly.
+func (l List[T]) IsSortedBy[K cmp.Ordered](sel func(T) K) bool {
+	return FromSlice([]T(l)).IsSortedBy(sel)
+}
+
 // SortedBy mirrors Seq.SortedBy eagerly.
 func (l List[T]) SortedBy[K cmp.Ordered](sel func(T) K) List[T] {
 	return List[T](FromSlice([]T(l)).SortedBy(sel).Collect())
@@ -259,6 +272,21 @@ func (l List[T]) First() (T, bool) {
 		return zero, false
 	}
 	return l[0], true
+}
+
+// FirstOr mirrors Seq.FirstOr eagerly.
+func (l List[T]) FirstOr(fallback T) T {
+	return FromSlice([]T(l)).FirstOr(fallback)
+}
+
+// LastOr mirrors Seq.LastOr eagerly.
+func (l List[T]) LastOr(fallback T) T {
+	return FromSlice([]T(l)).LastOr(fallback)
+}
+
+// IsSortedWith mirrors Seq.IsSortedWith eagerly.
+func (l List[T]) IsSortedWith(cmp func(a, b T) int) bool {
+	return FromSlice([]T(l)).IsSortedWith(cmp)
 }
 
 // Last mirrors Seq.Last eagerly, implemented directly over the
@@ -461,6 +489,11 @@ func (l List[T]) JoinToString(sep string, sel func(T) string) string {
 	return FromSlice([]T(l)).JoinToString(sep, sel)
 }
 
+// Sample mirrors Seq.Sample eagerly.
+func (l List[T]) Sample(n int, rng *rand.Rand) []T {
+	return FromSlice([]T(l)).Sample(n, rng)
+}
+
 // generatedListMethods is the manifest for the C15 conformance check.
 var generatedListMethods = []string{
 	"Filter",
@@ -493,6 +526,8 @@ var generatedListMethods = []string{
 	"FilterErr",
 	"DistinctBy",
 	"DedupeBy",
+	"DuplicatesBy",
+	"IsSortedBy",
 	"SortedBy",
 	"SortedByDesc",
 	"JoinBy",
@@ -505,6 +540,9 @@ var generatedListMethods = []string{
 	"ForEachErr",
 	"Drain",
 	"First",
+	"FirstOr",
+	"LastOr",
+	"IsSortedWith",
 	"Last",
 	"Single",
 	"ElementAt",
@@ -543,4 +581,5 @@ var generatedListMethods = []string{
 	"ProductOf",
 	"AverageOf",
 	"JoinToString",
+	"Sample",
 }

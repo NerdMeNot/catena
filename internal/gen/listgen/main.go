@@ -169,9 +169,17 @@ package catena
 	}
 	fmt.Fprintf(&out, "}\n")
 
+	// The mirror needs whichever packages the signatures it copied name.
 	src := out.Bytes()
-	if bytes.Contains(src, []byte("cmp.")) {
-		src = bytes.Replace(src, []byte("package catena\n"), []byte("package catena\n\nimport \"cmp\"\n"), 1)
+	var imports []string
+	for _, pkg := range []struct{ use, path string }{{"cmp.", "cmp"}, {"rand.", "math/rand/v2"}} {
+		if bytes.Contains(src, []byte(pkg.use)) {
+			imports = append(imports, fmt.Sprintf("\t%q\n", pkg.path))
+		}
+	}
+	if len(imports) > 0 {
+		src = bytes.Replace(src, []byte("package catena\n"),
+			[]byte("package catena\n\nimport (\n"+strings.Join(imports, "")+")\n"), 1)
 	}
 	formatted, err := formatSrc(src)
 	if err != nil {

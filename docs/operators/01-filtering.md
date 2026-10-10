@@ -165,6 +165,58 @@ fmt.Println(catena.Of("Go", "GO", "rust", "go").
 [Go rust]
 ```
 
+## Duplicates
+
+```go
+func Duplicates[T comparable](s Seq[T]) Seq[T]
+```
+
+Duplicates yields the elements that occur more than once: each such value once, at its second occurrence, so in the order values were first repeated.
+
+:::caution
+Retains one entry per distinct value — unbounded
+:::
+
+```go
+// Each value that occurs more than once, once — in the order the
+// repeats were found.
+ids := catena.Of(7, 3, 7, 9, 3, 7)
+fmt.Println(catena.Duplicates(ids).Collect())
+```
+
+```
+[7 3]
+```
+
+## DuplicatesBy
+
+```go
+func (s Seq[T]) DuplicatesBy[K comparable](sel func(T) K) Seq[T]
+```
+
+DuplicatesBy yields the elements that repeat a key: for each key seen more than once, the second element to have it, once. Order is the order in which keys were first repeated. catena.Duplicates(s) is the no-selector form, for a comparable T.
+
+:::caution
+Retains one key per distinct value — unbounded
+:::
+
+```go
+// The element reported is the one that repeats the key: here, the
+// second signup with each address.
+type signup struct {
+	Email string
+	Name  string
+}
+signups := catena.Of(
+	signup{"ada@x.io", "ada"}, signup{"bob@x.io", "bob"}, signup{"ada@x.io", "ada2"},
+)
+fmt.Println(signups.DuplicatesBy(func(s signup) string { return s.Email }).Collect())
+```
+
+```
+[{ada@x.io ada2}]
+```
+
 ## Dedupe
 
 ```go
