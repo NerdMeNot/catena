@@ -111,8 +111,9 @@ generated content says.
 ### Versioning the website
 
 The site serves the current release at the root and each archived series
-under its own prefix, with a switcher in the header. The `v1.3.x`, `v1.2.x`
-and `v1.1.x` series are archived at `/1-3/`, `/1-2/` and `/1-1/`; their
+under its own prefix, with a switcher in the header. The `v1.4.x`, `v1.3.x`,
+`v1.2.x` and `v1.1.x` series are archived at `/1-4/`, `/1-3/`, `/1-2/` and
+`/1-1/`; their
 pages carry a notice saying so and linking to the current one.
 
 **One archive per minor series, not per tag.** Three reasons:
@@ -170,7 +171,11 @@ To archive a series when you cut the next minor:
    versions: [{ slug: '1-2', label: 'v1.2.x' }, { slug: '1-1', label: 'v1.1.x' }]
    ```
 
-4. Build once and check the archived page shows the outdated-version
+4. **Give it a landing page.** `git archive` brings the tag's pages but
+   not an index for the archive itself, and `/1-2/` is a URL people will
+   open. Copy the previous archive's `index.md` into the new directory
+   and change the series and tag it names.
+5. Build once and check the archived page shows the outdated-version
    notice, the switcher offers both versions, and the archived operator
    reference does *not* mention anything added since.
 
