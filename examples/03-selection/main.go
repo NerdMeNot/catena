@@ -42,12 +42,13 @@ func main() {
 
 	// SortedBy is stable and calls its selector exactly once per element,
 	// so sorting by one key after another composes into a multi-level
-	// sort: level descending, then score descending within a level.
+	// sort: level descending, then score descending within a level. The
+	// leaderboard shows four, so the last level is TopNBy — the same
+	// order and the same ties as SortedByDesc(...).Take(4), holding four
+	// players instead of sorting all of them again.
 	ranked := s.
 		SortedByDesc(func(p Player) int { return p.Score }).
-		SortedByDesc(func(p Player) int { return p.Level }).
-		Take(4).
-		Collect()
+		TopNBy(4, func(p Player) int { return p.Level })
 	fmt.Println("leaderboard by level, then score:")
 	for _, p := range ranked {
 		fmt.Printf("  L%-2d %-4s %d\n", p.Level, p.Name, p.Score)

@@ -1,0 +1,7 @@
+package topn
+
+import . "github.com/NerdMeNot/catena"
+
+func dotted(xs Seq[int]) {
+	_ = TopN(xs, 3) // want `TopN keeps`
+}
