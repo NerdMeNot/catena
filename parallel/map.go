@@ -75,10 +75,22 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 			var wg sync.WaitGroup
 			w := newWindow[U](n, ordered)
 
-			// halt cancels the outstanding calls and joins them. It
-			// takes their results rather than only waiting, because a
-			// call may be blocked handing its result over; a panic
-			// among them is kept for the end. Idempotent.
+			// The calls run on a pool of workers that grows on demand,
+			// up to n: a new element goes to an idle worker if one is
+			// waiting, and starts another only if none is. A worker
+			// costs a goroutine once, not once per element.
+			jobs := make(chan job[T, U], min(n, jobsCap))
+			workers, closed := 0, false
+			work := func() {
+				for j := range jobs {
+					invoke(cctx, f, j)
+				}
+			}
+
+			// halt cancels the outstanding calls and joins the workers.
+			// It takes the calls' results rather than only waiting,
+			// because a call may be blocked handing its result over; a
+			// panic among them is kept for the end. Idempotent.
 			var crash any
 			halt := func() {
 				cancel()
@@ -86,6 +98,10 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 					if r := w.take(); crash == nil {
 						crash = r.crash
 					}
+				}
+				if !closed {
+					closed = true
+					close(jobs)
 				}
 				wg.Wait()
 			}
@@ -118,22 +134,21 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 			}
 
 			s.Seq()(func(v T) bool {
+				if closed {
+					return false // a source that kept going after being stopped
+				}
 				if cause = ctx.Err(); cause != nil {
 					halt()
 					return false
 				}
-				out := w.reserve()
-				wg.Go(func() {
-					var r result[U]
-					defer func() { out <- r }() // on return, panic and Goexit
-					protect(&r.crash, func() {
-						u, err := f(cctx, v)
-						if err == nil {
-							r.u = u // a failed call yields the zero value
-						}
-						r.err = err
-					})
-				})
+				j := job[T, U]{v, w.reserve()}
+				if workers < w.size {
+					// One worker per outstanding call, so that every
+					// one of them can be running at once.
+					workers++
+					wg.Go(work)
+				}
+				jobs <- j
 				// A full window must give up a result before another
 				// element is taken; beyond that, hand over whatever
 				// has already finished rather than hold it.
@@ -158,6 +173,41 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 			}
 		}
 	}
+}
+
+// jobsCap bounds the calls queued for a worker.
+const jobsCap = 64
+
+// job is one call to make: its argument, and where its result goes.
+type job[T, U any] struct {
+	v   T
+	out chan<- result[U]
+}
+
+// invoke makes one call and delivers its result — whatever happens. A
+// panic is recovered and delivered as the result's crash, and the worker
+// carries on; runtime.Goexit cannot be recovered, so its result is
+// delivered as the worker's goroutine unwinds.
+func invoke[T, U any](ctx context.Context, f func(context.Context, T) (U, error), j job[T, U]) {
+	var r result[U]
+	returned := false
+	defer func() {
+		if !returned {
+			// recover is nil while a Goexit unwinds, and never nil
+			// for a panic — panic(nil) is a *runtime.PanicNilError.
+			var zero U
+			if r.u, r.err, r.crash = zero, nil, recover(); r.crash == nil {
+				r.crash = errGoexit
+			}
+		}
+		j.out <- r
+	}()
+	u, err := f(ctx, j.v)
+	if err == nil {
+		r.u = u // a failed call yields the zero value
+	}
+	r.err = err
+	returned = true
 }
 
 // window holds the outstanding calls of one iteration: those started

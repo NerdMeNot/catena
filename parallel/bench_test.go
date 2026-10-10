@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/NerdMeNot/catena"
 	"github.com/NerdMeNot/catena/parallel"
@@ -87,6 +88,56 @@ func BenchmarkBuffer(b *testing.B) {
 	for b.Loop() {
 		n := 0
 		for v := range stage {
+			n += v
+		}
+		benchSink = n
+	}
+}
+
+func BenchmarkForEach_Par(b *testing.B) {
+	stage := parallel.ForEach(context.Background(), 8, func(context.Context, int) error { return nil })
+	s := catena.FromSlice(benchInput)
+	b.ReportAllocs()
+	for b.Loop() {
+		if err := s.Then(stage); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// ChunkedWithin against Chunked: what batching by time costs over
+// batching by size alone, which is one channel hand-off per element.
+func BenchmarkChunked_BySize(b *testing.B) {
+	s := catena.FromSlice(benchInput)
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for chunk := range catena.Chunked(s, 100) {
+			n += len(chunk)
+		}
+		benchSink = n
+	}
+}
+
+func BenchmarkChunkedWithin(b *testing.B) {
+	stage := catena.FromSlice(benchInput).Then(parallel.ChunkedWithin[int](100, time.Second))
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for chunk := range stage {
+			n += len(chunk)
+		}
+		benchSink = n
+	}
+}
+
+func BenchmarkMerge(b *testing.B) {
+	half := catena.FromSlice(benchInput[:len(benchInput)/2])
+	merged := parallel.Merge(half, half)
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for v := range merged {
 			n += v
 		}
 		benchSink = n
