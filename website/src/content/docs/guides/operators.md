@@ -47,6 +47,8 @@ a warning.
 | `DistinctWith` | [S] ⚠ mem distinct; O(n²) compares — small inputs |
 | `Reversed` | ⚠ mem all, ⚠∞ |
 | `Once` | panics on second consumption — a development guard |
+| `MergeSortedWith(cmp, others...)` | lazy merge of already-sorted inputs; holds one element per input; inputs via `iter.Pull` |
+| `Then(f)` | returns `f(s)` — chains package functions and `par` stages |
 | `UntilDone(ctx)` | → `Try`; yields ctx.Err() and stops on cancellation |
 
 ## Type-changing intermediates (`seq_map.go`)
@@ -65,6 +67,8 @@ a warning.
 | `DedupeBy(sel)` | [S] O(1); consecutive duplicates only |
 | `SortedBy`, `SortedByDesc` | ⚠ mem all, ⚠∞; stable; sel once per element |
 | `JoinBy` | inner hash join; ⚠ mem right side, buffered before first emission |
+| `LeftJoinBy` | left outer join: an unmatched left element is kept, and `combine` is told; ⚠ mem right side |
+| `GroupJoinBy` | one output per left element, with all its matches together; ⚠ mem right side |
 
 ## Consumption and search terminals (`seq_terminal.go`)
 
@@ -95,6 +99,7 @@ All ⚠∞; map results iterate in undefined order.
 | `FoldWhile` | ◐ the stopping call's accumulator is included |
 | `FoldErr` | ◐ accumulator-so-far + first error |
 | `FoldBy(key, init, f)` | ⚠ mem distinct keys — the streaming GroupBy |
+| `FoldedBy(key, init, f)` | → `Seq2`, keys in first-seen order — FoldBy that stays in the chain; ⚠ mem distinct keys, ⚠∞ |
 | `Reduce` | first element as initial accumulator; (zero, false) on empty |
 | `GroupBy` | ⚠ mem all; buckets in encounter order |
 | `IndexBy`, `Associate` | last wins on key collisions |
@@ -125,6 +130,7 @@ of `T`.
 |---|---|
 | `Distinct`, `Dedupe` | [S]; first wins / consecutive only |
 | `Sorted`, `SortedDesc` | ⚠ mem all, ⚠∞; stable |
+| `MergeSorted(seqs...)` | lazy merge of already-sorted inputs; equal elements keep argument order |
 | `Sum`, `Product`, `Average`, `Max`, `Min`, `MinMax`, `TopN`, `BottomN` | ⚠∞ |
 | `Contains`, `IndexOf` | ◐ |
 | `NonZero` | drops zero values |
@@ -136,15 +142,42 @@ of `T`.
 
 ## Batch operators (`batch.go`)
 
-Package functions of necessity — a `Seq[T]` method returning `Seq[[]T]` is
-an instantiation cycle. Every emitted slice is fresh; retaining one is
-always safe.
+Package functions of necessity — a `Seq[T]` method returning `Seq[[]T]`,
+or anything that leads back to it, is an instantiation cycle. Every
+emitted slice is fresh; retaining one is always safe.
 
 | Operator | Notes |
 |---|---|
 | `Chunked(s, n)` | [S]; last chunk may be partial |
 | `ChunkedBy(s, sel)` | [S] ⚠ mem longest run; a chunk per run of equal keys |
 | `Windowed(s, size, step)` | [S] ⚠ mem size; full windows only; step > size samples |
+| `GroupedBy(s, sel)` | → `Seq2[K, []T]`, keys in first-seen order — GroupBy that stays in the chain; ⚠ mem all, ⚠∞ |
+
+## Concurrency (`catena/par`)
+
+The operators that start goroutines, as stages for `Seq.Then`. Every one
+joins its goroutines before its iteration returns. See
+[06-concurrency.md](/guides/concurrency/).
+
+| Operator | Notes |
+|---|---|
+| `par.Map(ctx, n, f)` | → `Try`; `n` calls at once, results in source order; ⚠ mem `n` results; source stays on the consumer's goroutine |
+| `par.MapUnordered(ctx, n, f)` | → `Try`; results as calls finish; ⚠ mem `n` |
+| `par.ForEach(ctx, n, f)` | terminal; first error, the rest cancelled and joined; ⚠∞ on success |
+| `par.Buffer[T](n)` | read-ahead on a goroutine of its own; ⚠ mem `n`; upstream runs concurrently with the consumer |
+| `par.ChunkedWithin[T](n, d)` | → `Seq[[]T]`; a chunk at `n` elements or `d` after its first; never empty; ⚠ mem `n` |
+| `par.Merge(seqs...)` | interleaves by arrival, one goroutine per input; order within an input is kept |
+
+## Sources (`catena/source`, `catena/source/sqlsource`)
+
+Producers that open their resource inside the iteration and release it on
+every exit. All return a `Try`.
+
+| Operator | Notes |
+|---|---|
+| `source.Lines(open)` | lines of a reader, any length, endings stripped; ⚠ mem one line |
+| `source.Paginate(first, fetch)` | a page is fetched only once the one before it is yielded in full; ⚠ mem one page |
+| `sqlsource.Rows(open, scan)` | rows of a query; a failed scan is an element and iteration continues |
 
 ## `Seq2`, `Try`, `List`
 

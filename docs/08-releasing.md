@@ -35,7 +35,8 @@ The `Release` workflow then:
   no release, so nothing is published until they match.
 - **Runs the full gate** on the tagged commit: gofmt, vet,
   generate-idempotency (`list_gen.go` must be current), the race-enabled
-  suite, and the 100% module-wide coverage check.
+  suite, the 100% coverage check on the library's packages, the examples,
+  and the linter's own gate.
 - **Publishes** the GitHub release, with the tag's `CHANGELOG.md` section
   as its notes.
 
@@ -43,6 +44,23 @@ No artifacts are built: this is a library, and `go get` fetches the tag
 directly. A failed publish can be retried without moving the tag via the
 workflow's manual dispatch (`Actions → Release → Run workflow`, giving the
 existing tag).
+
+## The linter
+
+`lint/` is a module of its own, so it has its own tags: `lint/v0.1.0`, not
+`v0.1.0`. Go finds a nested module's versions by that prefix. It is
+released when its checks change, independently of the library, and it
+needs no `Version` constant or changelog section of its own — its changes
+are recorded in `CHANGELOG.md` under the library release they landed with.
+
+```sh
+git tag -a lint/v0.1.0 -m "catena lint v0.1.0"
+git push origin lint/v0.1.0
+```
+
+The same permanence applies: the proxy caches a `lint/` tag exactly as it
+caches any other. The library's release gate runs the linter's tests, so
+a library tag is never cut with the linter broken against it.
 
 ## The website
 
@@ -176,7 +194,7 @@ moved and the answer is to cut a release rather than publish the branch.
 
 ## Versioning policy
 
-Semantic versioning. `v1.2.0` is the current release. `v1.1.0` was the
+Semantic versioning. `v1.1.0` was the
 first supported one and froze the API; anything removed or changed incompatibly waits for a major
 version that nobody is in a hurry to have. Earlier tags were withdrawn and
 are retracted in `go.mod`.

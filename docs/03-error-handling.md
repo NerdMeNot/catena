@@ -43,7 +43,7 @@ first half, rule 5 is the second; rule 4 is a producer convention.
 ## `Try` is deliberately small
 
 `Try` carries 13 intermediates, three policy exits back to `Seq` (`Ignore`,
-`Errs`, `Must`) and the collecting terminals — against the 37 chainable
+`Errs`, `Must`) and the collecting terminals — against the 41 chainable
 operators `Seq` has. That is the design, not an omission: the
 moment data can fail, you should pick an error policy early and get the
 full API back. The intended shape is to stay in `Try` only while errors are
@@ -102,17 +102,21 @@ func Rows[T any](open func() (*sql.Rows, error), scan func(*sql.Rows) (T, error)
 }
 ```
 
+That function ships as `sqlsource.Rows`, next to `source.Lines` for the
+lines of a reader and `source.Paginate` for a paginated API — see the
+[sources reference](operators/16-sources.md). It is written out here
+because the same shape wraps anything else you own.
+
 Two properties carry the whole design, and both are tested against a real
-`database/sql` driver in `bake_test.go`:
+`database/sql` driver:
 
 - **Never consumed ⇒ never opened.** Take an opener, not an open resource.
 - **Early termination closes.** A downstream `Take(3)` returns through the
   producer, which runs its defers — composing through any number of
   stages.
 
-The same shape works for files (`bufio.Scanner` inside the closure — see
-`example_test.go`), network readers, and anything else that must be
-released. Cancellation enters the same way, at the edge:
+The same shape works for files, network readers, and anything else that
+must be released. Cancellation enters the same way, at the edge:
 `s.UntilDone(ctx)` passes elements through until the context is done, then
 yields the context's error and stops.
 

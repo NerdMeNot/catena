@@ -171,6 +171,157 @@ fmt.Println(orders.JoinBy(customers,
 [ada:30 bob:10]
 ```
 
+## LeftJoinBy
+
+```go
+func (s Seq[T]) LeftJoinBy[U any, K comparable, R any](
+	other Seq[U],
+	leftKey func(T) K, rightKey func(U) K,
+	combine func(T, U, bool) R,
+) Seq[R]
+```
+
+LeftJoinBy is a relational left outer join: like JoinBy, but a left element with no match is kept, and combine is called for it once with the zero U and false. Matched elements call combine with true once per match, so duplicate keys produce the cross product per key. Output order is left encounter order, then right encounter order within a key.
+
+:::caution
+Buffers all of other before the first emission
+:::
+
+```go
+// A left outer join: the order with no customer is kept, and combine
+// is told so.
+type order struct {
+	Customer int
+	Amount   int
+}
+type customer struct {
+	ID   int
+	Name string
+}
+orders := catena.Of(order{1, 30}, order{9, 99})
+customers := catena.Of(customer{1, "ada"})
+
+fmt.Println(orders.LeftJoinBy(customers,
+	func(o order) int { return o.Customer },
+	func(c customer) int { return c.ID },
+	func(o order, c customer, ok bool) string {
+		if !ok {
+			return fmt.Sprintf("?:%d", o.Amount)
+		}
+		return fmt.Sprintf("%s:%d", c.Name, o.Amount)
+	},
+).Collect())
+```
+
+```
+[ada:30 ?:99]
+```
+
+## GroupJoinBy
+
+```go
+func (s Seq[T]) GroupJoinBy[U any, K comparable, R any](
+	other Seq[U],
+	leftKey func(T) K, rightKey func(U) K,
+	combine func(T, []U) R,
+) Seq[R]
+```
+
+GroupJoinBy pairs each element of s with all the elements of other sharing its key, yielding combine exactly once per left element — the one-to-many join that keeps the many together. matches is in right encounter order and nil when nothing matches. It is shared by every left element with that key: retain it freely, but do not modify it.
+
+:::caution
+Buffers all of other before the first emission
+:::
+
+```go
+// One row per customer with all of their orders together — where
+// JoinBy would repeat the customer once per order.
+type order struct {
+	Customer int
+	Amount   int
+}
+type customer struct {
+	ID   int
+	Name string
+}
+customers := catena.Of(customer{1, "ada"}, customer{2, "bob"})
+orders := catena.Of(order{1, 30}, order{1, 12}, order{9, 99})
+
+fmt.Println(customers.GroupJoinBy(orders,
+	func(c customer) int { return c.ID },
+	func(o order) int { return o.Customer },
+	func(c customer, os []order) string { return fmt.Sprintf("%s:%d", c.Name, len(os)) },
+).Collect())
+```
+
+```
+[ada:2 bob:0]
+```
+
+## MergeSorted
+
+```go
+func MergeSorted[T cmp.Ordered](seqs ...Seq[T]) Seq[T]
+```
+
+MergeSorted merges already-sorted sequences into one sorted sequence; equal elements keep argument order. Lazy, holding one element per input: see Seq.MergeSortedWith, which this is for an ordered T.
+
+```go
+// Inputs that are each already sorted merge lazily, holding one
+// element per input — no buffer, so it works on unbounded streams.
+odds := catena.Generate(1, func(n int) int { return n + 2 })
+evens := catena.Generate(0, func(n int) int { return n + 2 })
+fmt.Println(catena.MergeSorted(odds, evens).Take(6).Collect())
+```
+
+```
+[0 1 2 3 4 5]
+```
+
+## MergeSortedWith
+
+```go
+func (s Seq[T]) MergeSortedWith(cmp func(a, b T) int, others ...Seq[T]) Seq[T]
+```
+
+MergeSortedWith merges s with others into one sequence ordered by cmp, given that every input is already ordered by cmp; on unsorted input the output is simply not sorted. Equal elements keep input order, the receiver first. Lazy: it holds one element per input and consumes each input at most one element past what it has yielded, at a cost of one comparison per input per element. Every input is consumed through iter.Pull (its cleanup always runs). catena.MergeSorted is the no-comparator form, for an ordered T.
+
+```go
+// The comparator form, for any element type. Equal elements keep
+// input order, the receiver first.
+byLen := func(a, b string) int { return len(a) - len(b) }
+a := catena.Of("go", "rust", "kotlin")
+b := catena.Of("c", "java")
+fmt.Println(a.MergeSortedWith(byLen, b).Collect())
+```
+
+```
+[c go rust java kotlin]
+```
+
+## Then
+
+```go
+func (s Seq[T]) Then[U any](f func(Seq[T]) U) U
+```
+
+Then returns f(s): it lets a function that takes a sequence sit inside a chain instead of wrapping it. That is every package function of one argument — s.Then(catena.Distinct).Then(catena.Sorted), or s.Then(catena.Sum) to finish — and every stage built by the par package. A function needing more arguments goes in a closure.
+
+```go
+// Package functions sit inside the chain instead of wrapping it; a
+// function taking more than the sequence goes in a closure.
+words := catena.Of("b", "a", "b", "c", "a")
+fmt.Println(words.
+	Then(catena.Distinct).
+	Then(catena.Sorted).
+	Then(func(s catena.Seq[string]) catena.Seq[[]string] { return catena.Chunked(s, 2) }).
+	Collect())
+```
+
+```
+[[a b] [c]]
+```
+
 ## Union
 
 ```go

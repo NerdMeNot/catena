@@ -12,8 +12,10 @@ patterns the library exists for.
 | [errors](04-errors/main.go) | `Try`: one parse pipeline, three error policies, `WrapErr`, `Recover` |
 | [resources](05-resources/main.go) | producers that own a resource: lazy acquisition, cleanup on early exit, `UntilDone` |
 | [streaming](06-streaming/main.go) | infinite sequences, `Scan` running state, `Windowed` moving averages, `Chunked` batching |
-| [join](07-join/main.go) | `JoinBy`: relational joins between struct tables, then rollups on the joined stream |
+| [join](07-join/main.go) | `JoinBy`, `LeftJoinBy`, `GroupJoinBy`: relational joins between struct tables, and `FoldedBy` rollups that stay in the chain |
 | [list](08-list/main.go) | eager `List`, crossing between eager and lazy, the `Seq2` bridge |
+| [concurrency](09-concurrency/main.go) | the `par` package: `Then`, concurrent `Map` with per-element errors, `ForEach`, batching by time |
+| [sources](10-sources/main.go) | shipped producers: `Lines` over a file, `Paginate` over an API, feeding a concurrent stage |
 
 None of them import anything beyond the standard library and catena, and
 every one prints what it computes — reading the output next to the code is

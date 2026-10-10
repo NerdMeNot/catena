@@ -40,8 +40,8 @@ Requires **Go 1.27+** for generic methods. Adding catena therefore raises
 your module's own `go` directive to 1.27, and everyone building your code
 — teammates and CI included — needs a 1.27 toolchain. No runtime
 dependencies: the one `require` line is a test-only property-testing
-library, and `go list -deps` on the package resolves to the standard
-library alone.
+library, and `go list -deps` on the package and its sub-packages resolves
+to the standard library alone.
 
 *Catena* is Latin for "chain".
 
@@ -55,8 +55,10 @@ mid-flight. What was missing was a library willing to be precise about the
 things that make or break iterator code in practice.
 
 **Nothing is hidden.** No `reflect`, no `any` in value position, no hidden
-buffering, and exactly one goroutine in the library — `ToChan`'s, declared
-in the first line of its doc comment. An operator that buffers says so
+buffering, and exactly one goroutine in the core package — `ToChan`'s,
+declared in the first line of its doc comment. Concurrency is a separate
+import, [`catena/par`](docs/06-concurrency.md), where every operator joins
+the goroutines it started before it returns. An operator that buffers says so
 too, with its bound; a terminal that would hang on an infinite sequence is
 marked; an invalid argument panics at construction, naming the operator
 you actually called. The only panics during iteration are `Once`'s and
@@ -108,8 +110,20 @@ vals        := nums.Ignore().Collect() // skip bad lines
 
 Producers that own a resource open it lazily *inside* the pipeline, so an
 unconsumed pipeline holds nothing and a downstream `Take(3)` still closes
-the rows — proven against the real `database/sql` stack in
-[bake_test.go](bake_test.go).
+the rows — proven against the real `database/sql` stack. The ones you
+would otherwise write yourself ship in `catena/source`: `Lines`,
+`Paginate`, and `sqlsource.Rows`.
+
+Callbacks that are slow run concurrently, without the pipeline changing
+shape. `Then` puts a stage in the chain; errors stay per-element, and
+nothing outlives the call:
+
+```go
+bodies, err := catena.FromSlice(urls).
+    Filter(isHTTPS).
+    Then(par.Map(ctx, 8, fetch)). // eight at a time, results in order
+    Collect()                     // every goroutine has exited by here
+```
 
 ## The operators worth switching for
 
@@ -120,6 +134,9 @@ Not syntax sugar — these change the memory class of the computation.
 | `FoldBy` | `GroupBy` + fold per bucket | 2.97 MB → **1.2 KB** (bounded by keys, not elements) |
 | `TopNBy(10, sel)` | `SortedDesc().Take(10)` | 1.7 MB → **1 KB**, 32× faster (bounded heap) |
 | `DedupeBy` | `DistinctBy` on sorted input | unbounded seen-set → **O(1)** |
+
+[`catenalint`](docs/07-linting.md) finds the left-hand column in your code
+and rewrites it where the result is provably the same.
 
 ## Performance, before you choose
 
@@ -152,10 +169,16 @@ you can judge what the nanoseconds buy.
 
 | Type | What it is |
 |---|---|
-| `Seq[T]` | lazy `iter.Seq[T]` with 84 methods — 37 chainable, 47 terminal; `range` works directly |
+| `Seq[T]` | lazy `iter.Seq[T]` with 89 methods — 41 chainable, 48 terminal; `range` works directly |
 | `Seq2[K, V]` | the stdlib pair currency; a bridge back to `Seq`, not a peer |
 | `Try[T]` | `iter.Seq2[T, error]`; error policy chosen by the consumer |
 | `List[T]` | eager `[]T` with the mirrored operation set — generated, and conformance-checked to agree with `AsSeq()` |
+
+| Package | What it adds |
+|---|---|
+| `catena/par` | the operators that start goroutines: `Map`, `MapUnordered`, `ForEach`, `Buffer`, `ChunkedWithin`, `Merge` |
+| `catena/source` | producers that open lazily and always release: `Lines`, `Paginate`, and `sqlsource.Rows` |
+| `catena/lint` | a separate module: `catenalint`, which finds pipelines that sort everything to keep ten, or never run |
 
 Interop is one conversion and zero cost, in both directions:
 `slices.Sorted(s.Seq())` to hand a pipeline to the stdlib,
@@ -164,15 +187,16 @@ element type (`Distinct`, `Sorted`, `Sum`, `Max`, …) are package functions,
 because a method on `Seq[T any]` may require nothing of `T` — so are
 `Chunked`, `ChunkedBy` and `Windowed`, which return `Seq[[]T]` and would be
 an instantiation cycle as methods. The chain continues normally after
-either kind.
+either kind, and `Then` keeps it unbroken:
+`s.Then(catena.Distinct).Then(catena.Sorted).Take(10)`.
 
 ## Documentation
 
 **[catena.nerdmenot.in](https://catena.nerdmenot.in)** — the documentation
 site: every guide and the full operator reference, versioned per release.
 
-**[Operator reference](docs/operators/README.md)** — all 183 operators
-across 14 pages, each with its signature, its memory and termination
+**[Operator reference](docs/operators/README.md)** — all 199 operators
+across 16 pages, each with its signature, its memory and termination
 behaviour, and a worked example that `go test` runs and verifies.
 
 Guides, in reading order:
@@ -182,6 +206,8 @@ Guides, in reading order:
 3. [Error handling](docs/03-error-handling.md) — `Try` and resource-owning producers
 4. [Operator catalog](docs/04-operators.md) — the index, with memory and drain classes
 5. [Performance](docs/05-performance.md) — the three-way benchmarks, honestly
-6. [Releasing](docs/06-releasing.md) — how a release is cut and verified
+6. [Concurrency](docs/06-concurrency.md) — the `par` package and its guarantee
+7. [Linting](docs/07-linting.md) — `catenalint` and what its fixes promise
+8. [Releasing](docs/08-releasing.md) — how a release is cut and verified
 
 Also: [runnable examples](examples/) · [API reference](https://pkg.go.dev/github.com/NerdMeNot/catena)

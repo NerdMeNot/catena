@@ -27,8 +27,10 @@ import (
 	"github.com/NerdMeNot/catena"
 )
 
-// FileLines is the lazy-acquisition pattern from docs/error-handling.md:
-// take the NAME, not an open handle. The opens/closes counters exist only
+// FileLines is the lazy-acquisition pattern from docs/error-handling.md,
+// written out by hand: take the NAME, not an open handle. catena/source
+// ships this one as source.Lines (see the sources example); it is spelled
+// out here because the same shape wraps any resource you own. The opens/closes counters exist only
 // so this example can prove the lifecycle claims it makes.
 func FileLines(path string, opens, closes *int) catena.Try[string] {
 	return func(yield func(string, error) bool) {

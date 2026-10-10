@@ -74,8 +74,8 @@ vals, errs := nums.CollectAll() // keep everything, gather all errors
 vals := nums.Ignore().Collect() // skip bad lines, keep going
 ```
 
-The full story — including how to write producers for files and
-`sql.Rows` that clean up after themselves — is in
+The full story — including the shipped producers for files, paginated
+APIs and `sql.Rows`, and how to write your own — is in
 [03-error-handling.md](03-error-handling.md).
 
 ## Eager when you want it

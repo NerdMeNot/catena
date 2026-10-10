@@ -11,14 +11,14 @@ import (
 // n calls at once and yielding results in source order. A failed call
 // yields (zero, err) and the stage continues. When ctx is done the stage
 // stops consuming, yields (zero, ctx.Err()) once, and ends; f receives a
-// context that is also cancelled the moment the consumer stops. Caller-
-// driven: the source runs on the consumer's goroutine. ⚠ Starts up to n
-// goroutines per iteration, all joined before it returns. Consumes at most
-// n elements beyond those yielded, and holds their results: one slow call
-// at the head delays everything behind it (MapUnordered does not). A
-// finished result is delivered only when the source next yields or ends,
-// so behind a slow live source it waits for the next element. Panics if
-// n <= 0.
+// context that is also cancelled the moment the consumer stops. The
+// source runs on the consumer's goroutine. ⚠ Starts up to n goroutines
+// per iteration, all joined before it returns. ⚠ Consumes at
+// most n elements beyond those yielded, and holds their results: one slow
+// call at the head delays everything behind it (MapUnordered does not).
+// ⚠ A finished result is delivered only when the source next yields or
+// ends, so behind a slow live source it waits for the next element.
+// Panics if n <= 0.
 func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U] {
 	return mapStage("Map", ctx, n, f, true)
 }
@@ -26,8 +26,8 @@ func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, er
 // MapUnordered is Map yielding each result as soon as its call finishes
 // rather than in source order: the same elements, bounds and error rules,
 // with no call able to delay another. ⚠ Starts up to n goroutines per
-// iteration, all joined before it returns. Consumes at most n elements
-// beyond those yielded. A finished result is delivered only when the
+// iteration, all joined before it returns. ⚠ Consumes at most n elements
+// beyond those yielded. ⚠ A finished result is delivered only when the
 // source next yields or ends. Panics if n <= 0.
 func MapUnordered[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U] {
 	return mapStage("MapUnordered", ctx, n, f, false)
@@ -38,7 +38,7 @@ func MapUnordered[T, U any](ctx context.Context, n int, f func(context.Context, 
 // ctx.Err() — or nil once every call has succeeded. On an error the
 // remaining calls are cancelled through their context and joined before
 // it returns. ⚠ Starts up to n goroutines, all joined before it returns.
-// Full drain on success. Panics if n <= 0.
+// ⚠ Full drain on success. Panics if n <= 0.
 func ForEach[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Seq[T]) error {
 	stage := mapStage("ForEach", ctx, n, func(ctx context.Context, v T) (struct{}, error) {
 		return struct{}{}, f(ctx, v)

@@ -28,15 +28,17 @@ jobs:
       - name: tests (race)
         run: go test -race ./...
 
-      # The gate covers the library — what people import. The generators
-      # under internal/gen are build tooling: they have their own tests
-      # (run above by `go test ./...`) but are not held to 100%, because
-      # their remaining uncovered lines are error paths unreachable with
-      # the shipped constants, and contriving tests for those would make
-      # the number meaningless.
+      # The gate covers the library — what people import: the core package
+      # and its public sub-packages. The generators under internal/gen are
+      # build tooling: they have their own tests (run above by
+      # `go test ./...`) but are not held to 100%, because their remaining
+      # uncovered lines are error paths unreachable with the shipped
+      # constants, and contriving tests for those would make the number
+      # meaningless.
       - name: library coverage is 100%
         run: |
-          go test -coverprofile=coverage.out -coverpkg=github.com/NerdMeNot/catena ./...
+          m=github.com/NerdMeNot/catena
+          go test -coverprofile=coverage.out -coverpkg=$m,$m/par,$m/source,$m/source/sqlsource ./...
           total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
           echo "total coverage: $total"
           test "$total" = "100.0%" || { echo "coverage regression: $total"; exit 1; }
@@ -49,6 +51,28 @@ jobs:
 
       - name: benchmarks compile and run briefly
         run: go test -bench . -benchtime=10x -run '^$' ./...
+
+      # The linter is a module of its own, so that the library's module
+      # depends on nothing — which also means `./...` above never reaches
+      # it. Its tests analyse packages under lint/testdata that import the
+      # catena in this checkout, offline, so that module's dependencies
+      # are fetched first.
+      - name: linter — vet, tests (race), coverage is 100%
+        working-directory: lint
+        run: |
+          go vet ./...
+          (cd testdata && go mod download)
+          go test -race -coverprofile=coverage.out -coverpkg=github.com/NerdMeNot/catena/lint ./...
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
+          echo "total coverage: $total"
+          test "$total" = "100.0%" || { echo "coverage regression: $total"; exit 1; }
+
+      # The examples are what people copy, so they are held to the
+      # linter's own advice; the sub-packages ride along.
+      - name: linter finds nothing in the examples
+        run: |
+          (cd lint && go build -o "$RUNNER_TEMP/catenalint" ./cmd/catenalint)
+          go vet -vettool="$RUNNER_TEMP/catenalint" ./examples/... ./par/... ./source/...
 
   # The website's pages are generated from docs/, examples/ and the
   # changelog, and the generated files are committed so that a deploy

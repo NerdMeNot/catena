@@ -62,9 +62,26 @@ jobs:
           go generate ./...
           git diff --exit-code list_gen.go Assets website/public docs/operators
           go test -race ./...
-          go test -coverprofile=coverage.out -coverpkg=github.com/NerdMeNot/catena ./...
+          m=github.com/NerdMeNot/catena
+          go test -coverprofile=coverage.out -coverpkg=$m,$m/par,$m/source,$m/source/sqlsource ./...
           total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
           test "$total" = "100.0%" || { echo "coverage regression: $total"; exit 1; }
+          for d in examples/*/; do go run "./$d" > /dev/null; done
+
+      # The linter is its own module and is tagged separately (lint/vX.Y.Z),
+      # but a library release must not ship with it broken against that
+      # library, so it is gated here too.
+      - name: Linter gate on the tagged commit
+        run: |
+          cd lint
+          go vet ./...
+          (cd testdata && go mod download)
+          go test -race -coverprofile=coverage.out -coverpkg=github.com/NerdMeNot/catena/lint ./...
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
+          test "$total" = "100.0%" || { echo "coverage regression: $total"; exit 1; }
+          go build -o "$RUNNER_TEMP/catenalint" ./cmd/catenalint
+          cd ..
+          go vet -vettool="$RUNNER_TEMP/catenalint" ./examples/... ./par/... ./source/...
 
   publish:
     name: Publish

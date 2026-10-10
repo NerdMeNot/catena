@@ -151,6 +151,65 @@ fmt.Println(v, ok, empty)
 6 true false
 ```
 
+## FoldedBy
+
+```go
+func (s Seq[T]) FoldedBy[K comparable, A any](
+	key func(T) K, init func(K) A, f func(A, T) A,
+) Seq2[K, A]
+```
+
+FoldedBy is FoldBy that stays in the chain: it folds each element into a per-key accumulator, then yields each key with its accumulator in the order the keys were first seen. init is called once per distinct key. Memory is bounded by the number of distinct keys, not elements. catena.GroupedBy is the same shape with every element kept.
+
+:::caution
+Fully drains the source before the first emission — hangs on infinite input
+:::
+
+```go
+// FoldBy that stays in the chain: keys come out in the order they
+// were first seen, so the result is deterministic and keeps flowing.
+words := catena.Of("pear", "apple", "plum", "avocado", "fig")
+fmt.Println(words.
+	FoldedBy(
+		func(w string) byte { return w[0] },
+		func(byte) int { return 0 },
+		func(n int, w string) int { return n + len(w) },
+	).
+	MapTo(func(initial byte, letters int) string { return fmt.Sprintf("%c=%d", initial, letters) }).
+	Collect())
+```
+
+```
+[p=8 a=12 f=3]
+```
+
+## GroupedBy
+
+```go
+func GroupedBy[T any, K comparable](s Seq[T], sel func(T) K) Seq2[K, []T]
+```
+
+GroupedBy is GroupBy that stays in the chain: it yields each key with its bucket, keys in the order they were first seen and each bucket in encounter order. Every bucket is a fresh slice. Seq.FoldedBy is the form that keeps an accumulator per key instead of every element. A package function for the same instantiation- cycle reason as Chunked: Seq2[K, []T] leads back to Seq[[]T].
+
+:::caution
+Fully drains the source before the first emission and retains every element — hangs on infinite input
+:::
+
+```go
+// GroupBy in first-seen key order, as a sequence of pairs rather
+// than a map.
+words := catena.Of("pear", "apple", "plum", "fig")
+for initial, group := range catena.GroupedBy(words, func(w string) byte { return w[0] }) {
+	fmt.Printf("%c %v\n", initial, group)
+}
+```
+
+```
+p [pear plum]
+a [apple]
+f [fig]
+```
+
 ## GroupBy
 
 ```go

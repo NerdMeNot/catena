@@ -15,8 +15,12 @@
 // Chunked, ChunkedBy and Windowed, which return Seq[[]T] — a method doing
 // that is an instantiation cycle — and the Flatten family, which constrains
 // the receiver's shape. Spelling is catena.Distinct(s), not s.Distinct(); the
-// chain continues normally afterwards, as catena.Distinct(s).Filter(f). If the
+// chain continues normally afterwards, as catena.Distinct(s).Filter(f) — or
+// stays unbroken with Then, as s.Then(catena.Distinct).Filter(f). If the
 // compiler reports "has no field or method Distinct", this is why.
+//
+// Beside this package: catena/par has the operators that start goroutines,
+// catena/source the producers for readers, paginated APIs and SQL rows.
 //
 // Contracts every caller should know:
 //
@@ -31,8 +35,10 @@
 //   - Operators marked as buffering state their bound; terminals marked as
 //     full-drain hang on infinite input.
 //   - Map-returning terminals return Go maps: iteration order is undefined.
+//     FoldedBy and GroupedBy are the ordered, chainable forms.
 //   - When a Try element carries a non-nil error, do not read the value.
-//   - Not safe for concurrent use; ToChan is the fan-out mechanism.
+//   - Not safe for concurrent use. ToChan is the fan-out mechanism, and
+//     the only goroutine this package starts; package par has the rest.
 //   - comparable-constrained functions panic at runtime if T is an
 //     interface type holding a non-comparable value (Go 1.20 semantics).
 package catena

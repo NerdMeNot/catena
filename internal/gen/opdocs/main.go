@@ -14,6 +14,9 @@
 // (`ExampleSeq_Filter` documents `Seq.Filter`), which means the same
 // functions also appear on pkg.go.dev at no extra cost.
 //
+// The sub-packages are read the same way; their operators are named with
+// the package (`par.Map`), which is also how a caller writes them.
+//
 // Run `go generate ./...`; CI fails if the output is not current.
 package main
 
@@ -39,8 +42,23 @@ type family struct {
 	Title   string
 	Summary string
 	// Members are godoc names: "Seq.Filter" for a method, "Distinct" for
-	// a package function.
+	// a package function, "par.Map" for a sub-package's.
 	Members []string
+}
+
+// source is one documented package: where it lives, and what its
+// operators' names are prefixed with to keep them apart from the core's.
+type source struct {
+	Dir     string // relative to the module root
+	Package string
+	Prefix  string
+}
+
+var sources = []source{
+	{Dir: ".", Package: "catena"},
+	{Dir: "par", Package: "par", Prefix: "par."},
+	{Dir: "source", Package: "source", Prefix: "source."},
+	{Dir: "source/sqlsource", Package: "sqlsource", Prefix: "sqlsource."},
 }
 
 var families = []family{
@@ -261,6 +279,35 @@ var families = []family{
 			"List.AsSeq", "List.FoldRight", "List.Append",
 		},
 	},
+	{
+		Order: 15,
+		Slug:  "concurrency",
+		Title: "Concurrency",
+		Summary: "The operators that start goroutines, in the `catena/par` package — the " +
+			"core package never does. Each is a stage that sits in a chain through " +
+			"`Seq.Then`, and each joins every goroutine it started before its iteration " +
+			"returns: on a normal end, an early break, a cancelled context and a panic " +
+			"alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently while " +
+			"the source stays on the consumer's goroutine; `Buffer`, `ChunkedWithin` and " +
+			"`Merge` run the source itself on a goroutine of its own. The " +
+			"[concurrency guide](../06-concurrency.md) explains the two models.",
+		Members: []string{
+			"par.Map", "par.MapUnordered", "par.ForEach",
+			"par.Buffer", "par.ChunkedWithin", "par.Merge",
+		},
+	},
+	{
+		Order: 16,
+		Slug:  "sources",
+		Title: "Sources",
+		Summary: "Ready-made producers for what pipelines most often start from, in the " +
+			"`catena/source` and `catena/source/sqlsource` packages. Each takes a function " +
+			"that opens its resource rather than an open resource, and calls it inside the " +
+			"iteration: a pipeline that is built but never consumed opens nothing, and any " +
+			"exit — the end, an early stop, a panic — releases it. All of them return a " +
+			"`Try`, so a failure is an element the consumer decides about.",
+		Members: []string{"source.Lines", "source.Paginate", "sqlsource.Rows"},
+	},
 }
 
 // firstSentence trims a family summary to its opening sentence, for the
@@ -289,13 +336,15 @@ func main() {
 	}
 
 	fset := token.NewFileSet()
-	ops, err := readOperators(fset, dir)
-	if err != nil {
-		log.Fatal(err)
-	}
-	examples, err := readExamples(fset, dir)
-	if err != nil {
-		log.Fatal(err)
+	ops := map[string]operator{}
+	examples := map[string]example{}
+	for _, src := range sources {
+		if err := readOperators(fset, filepath.Join(dir, src.Dir), src, ops); err != nil {
+			log.Fatal(err)
+		}
+		if err := readExamples(fset, filepath.Join(dir, src.Dir), src, examples); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -367,20 +416,20 @@ type operator struct {
 	Doc       string
 }
 
-// readOperators collects every exported function and method in the package.
-func readOperators(fset *token.FileSet, dir string) (map[string]operator, error) {
+// readOperators adds every exported function and method of the package in
+// dir to ops.
+func readOperators(fset *token.FileSet, dir string, src source, ops map[string]operator) error {
 	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
 		return !strings.HasSuffix(fi.Name(), "_test.go")
 	}, parser.ParseComments)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	pkg, ok := pkgs["catena"]
+	pkg, ok := pkgs[src.Package]
 	if !ok {
-		return nil, fmt.Errorf("package catena not found in %s", dir)
+		return fmt.Errorf("package %s not found in %s", src.Package, dir)
 	}
 
-	ops := map[string]operator{}
 	for _, file := range pkg.Files {
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
@@ -395,6 +444,7 @@ func readOperators(fset *token.FileSet, dir string) (map[string]operator, error)
 				}
 				name = recv + "." + name
 			}
+			name = src.Prefix + name
 			ops[name] = operator{
 				Name:      name,
 				Signature: signature(fset, fn),
@@ -402,7 +452,7 @@ func readOperators(fset *token.FileSet, dir string) (map[string]operator, error)
 			}
 		}
 	}
-	return ops, nil
+	return nil
 }
 
 func receiverName(t ast.Expr) string {
@@ -465,13 +515,12 @@ type example struct {
 // the printer resolves comments from the file's comment list, not from the
 // statements, so reprinting a body silently drops the explanatory comments
 // — and the `// Output:` line the whole thing hangs on.
-func readExamples(fset *token.FileSet, dir string) (map[string]example, error) {
+func readExamples(fset *token.FileSet, dir string, from source, out map[string]example) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	out := map[string]example{}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), "_test.go") {
 			continue
@@ -479,11 +528,11 @@ func readExamples(fset *token.FileSet, dir string) (map[string]example, error) {
 		path := filepath.Join(dir, e.Name())
 		src, err := os.ReadFile(path)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		file, err := parser.ParseFile(fset, path, src, parser.ParseComments)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		base := fset.File(file.Pos()).Base()
 		for _, decl := range file.Decls {
@@ -496,14 +545,14 @@ func readExamples(fset *token.FileSet, dir string) (map[string]example, error) {
 				continue // package-level Example
 			}
 			// ExampleSeq_Filter -> Seq.Filter; ExampleDistinct -> Distinct.
-			subject = strings.Replace(subject, "_", ".", 1)
+			subject = from.Prefix + strings.Replace(subject, "_", ".", 1)
 			lo := int(fn.Body.Lbrace) - base + 1
 			hi := int(fn.Body.Rbrace) - base
 			body, output := splitExample(string(src[lo:hi]))
 			out[subject] = example{Body: body, Output: output}
 		}
 	}
-	return out, nil
+	return nil
 }
 
 // splitExample separates an Example's statements from the `// Output:`
@@ -583,18 +632,15 @@ func render(f family, ops map[string]operator, examples map[string]example) (str
 		}
 		ex, ok := examples[name]
 		if !ok {
-			return "", 0, fmt.Errorf("%s has no example: add func Example%s to the tests",
-				name, strings.Replace(name, ".", "_", 1))
+			return "", 0, fmt.Errorf("%s has no example: add its Example function to that package's tests", name)
 		}
 		if ex.Output == "" {
-			return "", 0, fmt.Errorf("Example%s has no `// Output:` comment, so nothing verifies it",
-				strings.Replace(name, ".", "_", 1))
+			return "", 0, fmt.Errorf("the example for %s has no `// Output:` comment, so nothing verifies it", name)
 		}
 
-		short := name
-		if i := strings.Index(name, "."); i >= 0 {
-			short = name[i+1:]
-		}
+		// The heading is the bare name: the page already says which
+		// type or package it belongs to.
+		short := name[strings.LastIndex(name, ".")+1:]
 		fmt.Fprintf(&b, "\n## %s\n\n", short)
 		fmt.Fprintf(&b, "```go\n%s\n```\n\n", op.Signature)
 		if s := summary(op.Doc); s != "" {
