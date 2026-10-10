@@ -12,7 +12,7 @@ Start here, read in roughly this order:
   memory class, drain class, and the notes that matter.
 - **[Performance](05-performance.md)** — what the iterator protocol costs, what
   catena adds (nothing, measured), and when fusion wins outright.
-- **[Concurrency](06-concurrency.md)** — the `par` package: running callbacks
+- **[Concurrency](06-concurrency.md)** — the `parallel` package: running callbacks
   and sources concurrently, and the guarantee that nothing outlives the
   iteration.
 - **[Linting](07-linting.md)** — `catenalint`: the checks for pipelines that

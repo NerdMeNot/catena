@@ -24,7 +24,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/NerdMeNot/catena/par"
+	"github.com/NerdMeNot/catena/parallel"
 	"github.com/NerdMeNot/catena/source"
 )
 
@@ -93,7 +93,7 @@ func main() {
 	}
 	greetings, err := users.
 		Ignore().
-		Then(par.Map(context.Background(), 3, greet)).
+		Then(parallel.Map(context.Background(), 3, greet)).
 		Collect()
 	fmt.Println(greetings, err)
 

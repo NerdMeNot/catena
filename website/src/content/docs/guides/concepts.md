@@ -29,7 +29,7 @@ no copying.
 standard library's `maps.All`/`slices.All` world, not a second home.
 
 Those four are the whole core package. Three more packages sit beside it,
-each opt-in by import: `catena/par` for the operators that start
+each opt-in by import: `catena/parallel` for the operators that start
 goroutines ([concurrency](/guides/concurrency/)), `catena/source` for
 ready-made producers over readers, paginated APIs and SQL rows
 ([error handling](/guides/error-handling/)), and the separate `catena/lint`

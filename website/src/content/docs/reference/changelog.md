@@ -25,7 +25,7 @@ before — but it is no longer someone else's problem.
   takes one sits inside the chain instead of wrapping it. Every
   one-argument package function fits, with its types inferred:
   `s.Then(catena.Distinct).Then(catena.Sorted).Take(10)`. It is also how
-  the stages in `catena/par` attach.
+  the stages in `catena/parallel` attach.
 - **Ordered, chainable grouping.** `Seq.FoldedBy` and `catena.GroupedBy`
   are `FoldBy` and `GroupBy` that yield a `Seq2` of pairs, keys in the
   order they were first seen, instead of returning a map: the result is
@@ -35,7 +35,7 @@ before — but it is no longer someone else's problem.
 - **Joins that drop nothing.** `Seq.LeftJoinBy` keeps a left element with
   no match and tells `combine` so; `Seq.GroupJoinBy` yields one result per
   left element with all of its matches together.
-- **`catena/par`: concurrency.** Six operators, each a stage for `Then`:
+- **`catena/parallel`: concurrency.** Six operators, each a stage for `Then`:
   - `Map`, `MapUnordered` and `ForEach` run a callback up to `n` at a
     time. The source stays on the consumer's goroutine; only the callback
     runs elsewhere. A failed call is a `Try` element, so `Collect`,
@@ -70,7 +70,7 @@ before — but it is no longer someone else's problem.
 
 ### Changed
 
-- The 100% coverage gate now covers `par`, `source` and `sqlsource` as
+- The 100% coverage gate now covers `parallel`, `source` and `sqlsource` as
   well as the core package, and the linter's module is gated to 100%
   separately. CI also runs the linter over the examples, which must come
   back clean.

@@ -189,16 +189,16 @@ bounded by distinct keys where `GroupBy` retains every element, and
   `iter.Pull` — a runtime coroutine. A zip pipeline measures ~35ns per
   element end to end, which the coroutine dominates. There is no
   cheaper way to do it; the cost is documented rather than hidden.
-- **`par`** starts a goroutine per element, which is what its callbacks
+- **`parallel`** starts a goroutine per element, which is what its callbacks
   need and what a hand-written concurrent loop does too. With a callback
-  that does nothing, `par.Map` over 10k elements takes 3.2ms — about
+  that does nothing, `parallel.Map` over 10k elements takes 3.2ms — about
   0.3µs an element — against 3.7ms for the hand-written loop (a
   goroutine per element behind a semaphore, results into a preallocated
-  slice) and 0.02ms for doing it sequentially. So `par` costs nothing over
+  slice) and 0.02ms for doing it sequentially. So `parallel` costs nothing over
   writing the concurrency yourself, and concurrency costs about 0.3µs an
   element over not having any: worth it for a callback that waits on
   I/O, a loss for one that does arithmetic. `Buffer` costs one channel
-  hand-off, about 50ns an element. (`par/bench_test.go`.)
+  hand-off, about 50ns an element. (`parallel/bench_test.go`.)
 - **`Chunked`/`ChunkedBy`/`Windowed`** allocate a fresh slice per emitted
   batch, always. Reusing the buffer would corrupt data for anyone who
   retains a batch; the allocation is the price of that guarantee being

@@ -38,7 +38,7 @@ jobs:
       - name: library coverage is 100%
         run: |
           m=github.com/NerdMeNot/catena
-          go test -coverprofile=coverage.out -coverpkg=$m,$m/par,$m/source,$m/source/sqlsource ./...
+          go test -coverprofile=coverage.out -coverpkg=$m,$m/parallel,$m/source,$m/source/sqlsource ./...
           total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
           echo "total coverage: $total"
           test "$total" = "100.0%" || { echo "coverage regression: $total"; exit 1; }
@@ -72,7 +72,7 @@ jobs:
       - name: linter finds nothing in the examples
         run: |
           (cd lint && go build -o "$RUNNER_TEMP/catenalint" ./cmd/catenalint)
-          go vet -vettool="$RUNNER_TEMP/catenalint" ./examples/... ./par/... ./source/...
+          go vet -vettool="$RUNNER_TEMP/catenalint" ./examples/... ./parallel/... ./source/...
 
   # The website's pages are generated from docs/, examples/ and the
   # changelog, and the generated files are committed so that a deploy

@@ -1,6 +1,6 @@
-package par_test
+package parallel_test
 
-// The conformance harness for package par, mirroring the core package's.
+// The conformance harness for package parallel, mirroring the core package's.
 // Every exported operator is registered here and run through the checks
 // its execution model allows (P1-P16); completeness_test.go fails the
 // build for one that is not.
@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/NerdMeNot/catena"
-	"github.com/NerdMeNot/catena/par"
+	"github.com/NerdMeNot/catena/parallel"
 )
 
 // ---- registries ----
@@ -43,8 +43,8 @@ type mapOp struct {
 }
 
 var mapOps = []mapOp{
-	{name: "Map", covers: []string{"Map"}, build: par.Map[int, int], ordered: true},
-	{name: "MapUnordered", covers: []string{"MapUnordered"}, build: par.MapUnordered[int, int]},
+	{name: "Map", covers: []string{"Map"}, build: parallel.Map[int, int], ordered: true},
+	{name: "MapUnordered", covers: []string{"MapUnordered"}, build: parallel.MapUnordered[int, int]},
 }
 
 // stageOp is a producer stage, flattened to Seq[int] -> Seq[int].
@@ -60,7 +60,7 @@ var stageOps = []stageOp{
 	{
 		name:   "Buffer",
 		covers: []string{"Buffer"},
-		op:     func(s catena.Seq[int]) catena.Seq[int] { return s.Then(par.Buffer[int](3)) },
+		op:     func(s catena.Seq[int]) catena.Seq[int] { return s.Then(parallel.Buffer[int](3)) },
 		model:  slices.Clone[[]int],
 		ahead:  4, // n buffered + one in the producer's hand
 	},
@@ -68,7 +68,7 @@ var stageOps = []stageOp{
 		name:   "ChunkedWithin_FlattenSlices",
 		covers: []string{"ChunkedWithin"},
 		op: func(s catena.Seq[int]) catena.Seq[int] {
-			return catena.FlattenSlices(s.Then(par.ChunkedWithin[int](3, time.Second)))
+			return catena.FlattenSlices(s.Then(parallel.ChunkedWithin[int](3, time.Second)))
 		},
 		model: slices.Clone[[]int], // chunk then flatten is the identity
 		ahead: 2,                   // the rest of the chunk + one in the producer's hand
@@ -76,7 +76,7 @@ var stageOps = []stageOp{
 	{
 		name:   "Merge",
 		covers: []string{"Merge"},
-		op:     func(s catena.Seq[int]) catena.Seq[int] { return par.Merge(s, nil) },
+		op:     func(s catena.Seq[int]) catena.Seq[int] { return parallel.Merge(s, nil) },
 		model:  slices.Clone[[]int], // one live input: its own order
 		ahead:  1,
 	},
@@ -787,7 +787,7 @@ func TestForEach(t *testing.T) {
 	bubble(t, "all_succeed", func(t *testing.T) {
 		var sum atomic.Int64
 		var p probe
-		err := catena.Range(1, 101, 1).Then(par.ForEach(ctx, 8, func(ctx context.Context, v int) error {
+		err := catena.Range(1, 101, 1).Then(parallel.ForEach(ctx, 8, func(ctx context.Context, v int) error {
 			_, err := p.wrap(func(context.Context, int) (int, error) {
 				time.Sleep(time.Millisecond)
 				sum.Add(int64(v))
@@ -810,7 +810,7 @@ func TestForEach(t *testing.T) {
 			<-ctx.Done()
 			return 0, ctx.Err()
 		})
-		err := src.seq().Then(par.ForEach(ctx, 4, func(ctx context.Context, v int) error {
+		err := src.seq().Then(parallel.ForEach(ctx, 4, func(ctx context.Context, v int) error {
 			_, err := f(ctx, v)
 			return err
 		}))
@@ -822,7 +822,7 @@ func TestForEach(t *testing.T) {
 
 	bubble(t, "first_error_to_occur_wins", func(t *testing.T) {
 		errSlow, errFast := errors.New("slow"), errors.New("fast")
-		err := catena.Of(1, 2).Then(par.ForEach(ctx, 2, func(ctx context.Context, v int) error {
+		err := catena.Of(1, 2).Then(parallel.ForEach(ctx, 2, func(ctx context.Context, v int) error {
 			if v == 1 {
 				time.Sleep(2 * time.Second) // fails later, and ignores its context
 				return errSlow
@@ -841,7 +841,7 @@ func TestForEach(t *testing.T) {
 		// stage had taken the last result: that is still a cancelled
 		// run, and ForEach says so.
 		cctx, cancel := context.WithCancel(ctx)
-		err := catena.Of(1, 2, 3).Then(par.ForEach(cctx, 3, func(_ context.Context, v int) error {
+		err := catena.Of(1, 2, 3).Then(parallel.ForEach(cctx, 3, func(_ context.Context, v int) error {
 			if v == 3 {
 				cancel()
 			}
@@ -855,7 +855,7 @@ func TestForEach(t *testing.T) {
 	bubble(t, "parent_cancelled", func(t *testing.T) {
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
-		err := catena.Of(1).Then(par.ForEach(cctx, 2, func(context.Context, int) error { return nil }))
+		err := catena.Of(1).Then(parallel.ForEach(cctx, 2, func(context.Context, int) error { return nil }))
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err=%v", err)
 		}
@@ -863,7 +863,7 @@ func TestForEach(t *testing.T) {
 
 	bubble(t, "nil_source", func(t *testing.T) {
 		var s catena.Seq[int]
-		if err := s.Then(par.ForEach(ctx, 2, func(context.Context, int) error { return errBoom })); err != nil {
+		if err := s.Then(parallel.ForEach(ctx, 2, func(context.Context, int) error { return errBoom })); err != nil {
 			t.Fatalf("err=%v", err)
 		}
 	})
@@ -1016,7 +1016,7 @@ func TestBufferRunsAhead(t *testing.T) {
 		// overlap behind a buffer instead of taking turns.
 		src := source{n: 5, delay: func(int) time.Duration { return time.Second }}
 		begin := time.Now()
-		for range src.seq().Then(par.Buffer[int](2)) {
+		for range src.seq().Then(parallel.Buffer[int](2)) {
 			time.Sleep(time.Second)
 		}
 		if d := time.Since(begin); d != 6*time.Second {
@@ -1026,7 +1026,7 @@ func TestBufferRunsAhead(t *testing.T) {
 		// And it runs at most n+1 ahead of a consumer that has stopped
 		// taking: n in the buffer and one in the producer's hand.
 		ahead := source{n: -1}
-		for range ahead.seq().Then(par.Buffer[int](3)) {
+		for range ahead.seq().Then(parallel.Buffer[int](3)) {
 			synctest.Wait()
 			if got := ahead.produced.Load(); got != 1+3+1 {
 				t.Fatalf("produced %d with one yielded", got)
@@ -1043,7 +1043,7 @@ func TestMerge(t *testing.T) {
 			return src.seq().Map(func(v int) int { return v + offset })
 		}
 		// Arrivals at 2s, 4s, 6s and at 5s, 10s, 15s: never together.
-		got := par.Merge(every(2*time.Second, 0), every(5*time.Second, 100)).Collect()
+		got := parallel.Merge(every(2*time.Second, 0), every(5*time.Second, 100)).Collect()
 		if !slices.Equal(got, []int{0, 1, 100, 2, 101, 102}) {
 			t.Fatalf("got %v", got)
 		}
@@ -1055,7 +1055,7 @@ func TestMerge(t *testing.T) {
 			return src.seq()
 		}
 		begin := time.Now()
-		got := par.Merge(slow(), slow(), slow()).Collect()
+		got := parallel.Merge(slow(), slow(), slow()).Collect()
 		if len(got) != 12 || time.Since(begin) != 4*time.Second {
 			t.Fatalf("%d elements in %v", len(got), time.Since(begin))
 		}
@@ -1070,7 +1070,7 @@ func TestMerge(t *testing.T) {
 		last := []int{-1, -1, -1}
 		contributed := []int64{0, 0, 0}
 		yielded := 0
-		for v := range par.Merge(tagged(0), tagged(1), tagged(2)) {
+		for v := range parallel.Merge(tagged(0), tagged(1), tagged(2)) {
 			from, seq := v%10, v/10
 			if seq != last[from]+1 {
 				t.Fatalf("source %d yielded %d after %d", from, seq, last[from])
@@ -1089,14 +1089,14 @@ func TestMerge(t *testing.T) {
 	})
 
 	bubble(t, "no_sources", func(t *testing.T) {
-		if got := par.Merge[int]().Collect(); got != nil {
+		if got := parallel.Merge[int]().Collect(); got != nil {
 			t.Fatalf("got %v", got)
 		}
 	})
 
 	bubble(t, "break_stops_every_source", func(t *testing.T) {
 		a, b, c := source{n: -1}, source{n: -1}, source{n: -1}
-		for range par.Merge(a.seq(), b.seq(), c.seq()) {
+		for range parallel.Merge(a.seq(), b.seq(), c.seq()) {
 			break
 		}
 		if !a.clean() || !b.clean() || !c.clean() {
@@ -1108,7 +1108,7 @@ func TestMerge(t *testing.T) {
 		// Without the abort, the infinite sibling would keep the panic
 		// from ever surfacing.
 		bad, endless := source{n: 10, panicAt: 2}, source{n: -1}
-		v := mustPanic(t, func() { par.Merge(endless.seq(), bad.seq()).Drain() })
+		v := mustPanic(t, func() { parallel.Merge(endless.seq(), bad.seq()).Drain() })
 		if v != "source boom" || !endless.clean() {
 			t.Fatalf("recovered %v, sibling clean=%v", v, endless.clean())
 		}
@@ -1116,7 +1116,7 @@ func TestMerge(t *testing.T) {
 
 	bubble(t, "source_goexit", func(t *testing.T) {
 		exits := catena.Seq[int](func(func(int) bool) { runtime.Goexit() })
-		v := mustPanic(t, func() { par.Merge(exits).Drain() })
+		v := mustPanic(t, func() { parallel.Merge(exits).Drain() })
 		if err, ok := v.(error); !ok || !strings.Contains(err.Error(), "runtime.Goexit") {
 			t.Fatalf("recovered %v", v)
 		}
@@ -1200,7 +1200,7 @@ func TestChunkedWithinTiming(t *testing.T) {
 			})
 			begin := time.Now()
 			var got []emission
-			for chunk := range src.Then(par.ChunkedWithin[int](tc.n, tc.d)) {
+			for chunk := range src.Then(parallel.ChunkedWithin[int](tc.n, tc.d)) {
 				got = append(got, emission{time.Since(begin), fmt.Sprint(chunk)})
 			}
 			if !slices.Equal(got, tc.want) {
@@ -1211,7 +1211,7 @@ func TestChunkedWithinTiming(t *testing.T) {
 
 	bubble(t, "chunks_are_fresh", func(t *testing.T) {
 		var kept [][]int
-		for chunk := range catena.Range(0, 6, 1).Then(par.ChunkedWithin[int](2, time.Second)) {
+		for chunk := range catena.Range(0, 6, 1).Then(parallel.ChunkedWithin[int](2, time.Second)) {
 			kept = append(kept, chunk)
 			chunk[0] = -1 // scribbling on one must not reach the next
 		}
@@ -1224,7 +1224,7 @@ func TestChunkedWithinTiming(t *testing.T) {
 		src := source{n: 10, panicAt: 2}
 		var got [][]int
 		v := mustPanic(t, func() {
-			for chunk := range src.seq().Then(par.ChunkedWithin[int](5, time.Hour)) {
+			for chunk := range src.seq().Then(parallel.ChunkedWithin[int](5, time.Hour)) {
 				got = append(got, chunk)
 			}
 		})
@@ -1235,7 +1235,7 @@ func TestChunkedWithinTiming(t *testing.T) {
 
 	bubble(t, "break_on_a_deadline_flush", func(t *testing.T) {
 		src := source{n: -1, delay: func(int) time.Duration { return 3 * time.Second }}
-		for range src.seq().Then(par.ChunkedWithin[int](10, time.Second)) {
+		for range src.seq().Then(parallel.ChunkedWithin[int](10, time.Second)) {
 			break
 		}
 		if !src.clean() {
@@ -1248,12 +1248,12 @@ func TestConstructionPanics(t *testing.T) {
 	ctx := context.Background()
 	f := func(context.Context, int) (int, error) { return 0, nil }
 	for want, build := range map[string]func(){
-		"par: Map: n must be > 0":           func() { par.Map(ctx, 0, f) },
-		"par: MapUnordered: n must be > 0":  func() { par.MapUnordered(ctx, -1, f) },
-		"par: ForEach: n must be > 0":       func() { par.ForEach(ctx, 0, func(context.Context, int) error { return nil }) },
-		"par: Buffer: n must be > 0":        func() { par.Buffer[int](0) },
-		"par: ChunkedWithin: n must be > 0": func() { par.ChunkedWithin[int](0, time.Second) },
-		"par: ChunkedWithin: d must be > 0": func() { par.ChunkedWithin[int](1, 0) },
+		"parallel: Map: n must be > 0":           func() { parallel.Map(ctx, 0, f) },
+		"parallel: MapUnordered: n must be > 0":  func() { parallel.MapUnordered(ctx, -1, f) },
+		"parallel: ForEach: n must be > 0":       func() { parallel.ForEach(ctx, 0, func(context.Context, int) error { return nil }) },
+		"parallel: Buffer: n must be > 0":        func() { parallel.Buffer[int](0) },
+		"parallel: ChunkedWithin: n must be > 0": func() { parallel.ChunkedWithin[int](0, time.Second) },
+		"parallel: ChunkedWithin: d must be > 0": func() { parallel.ChunkedWithin[int](1, 0) },
 	} {
 		if got := mustPanic(t, build); got != want {
 			t.Errorf("panicked with %q, want %q", got, want)

@@ -1,4 +1,4 @@
-// Concurrency: the par package runs slow callbacks several at a time
+// Concurrency: the parallel package runs slow callbacks several at a time
 // without the pipeline changing shape. A stage goes into the chain with
 // Then; a failed call is an element, so the consumer still picks the
 // error policy; and every goroutine a stage starts has exited before the
@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/NerdMeNot/catena"
-	"github.com/NerdMeNot/catena/par"
+	"github.com/NerdMeNot/catena/parallel"
 )
 
 type Page struct {
@@ -51,7 +51,7 @@ func main() {
 	start := time.Now()
 	pages, errs := catena.FromSlice(urls).
 		Filter(https).
-		Then(par.Map(ctx, 4, fetch)).
+		Then(parallel.Map(ctx, 4, fetch)).
 		CollectAll()
 	fmt.Printf("fetched %d pages in about %v\n", len(pages), time.Since(start).Round(50*time.Millisecond))
 	for _, p := range pages[:3] {
@@ -69,7 +69,7 @@ func main() {
 	}
 	got, err := catena.FromSlice(urls).
 		Filter(https).
-		Then(par.Map(ctx, 2, counted)).
+		Then(parallel.Map(ctx, 2, counted)).
 		Collect()
 	fmt.Printf("stop at first error: %d pages, then %v\n", len(got), err)
 	fmt.Printf("  %d of 8 fetches were ever started\n", started.Load())
@@ -78,7 +78,7 @@ func main() {
 	// elements, in completion order. Sort when the order matters.
 	sizes := catena.FromSlice(urls).
 		Filter(https).
-		Then(par.MapUnordered(ctx, 4, fetch)).
+		Then(parallel.MapUnordered(ctx, 4, fetch)).
 		Ignore().
 		Map(func(p Page) int { return p.Bytes }).
 		Collect()
@@ -87,7 +87,7 @@ func main() {
 
 	// ForEach is the terminal: run for effect, get the first error back.
 	var total atomic.Int64
-	err = catena.Range(1, 101, 1).Then(par.ForEach(ctx, 8, func(_ context.Context, n int) error {
+	err = catena.Range(1, 101, 1).Then(parallel.ForEach(ctx, 8, func(_ context.Context, n int) error {
 		total.Add(int64(n))
 		return nil
 	}))
@@ -108,7 +108,7 @@ func main() {
 		}
 	})
 	fmt.Println("batches of up to 3, or 100ms:")
-	for batch := range bursty.Then(par.ChunkedWithin[int](3, 100*time.Millisecond)) {
+	for batch := range bursty.Then(parallel.ChunkedWithin[int](3, 100*time.Millisecond)) {
 		fmt.Printf("  %v\n", batch)
 	}
 }
