@@ -181,7 +181,7 @@ fmt.Println(batches)
 func Merge[T any](seqs ...catena.Seq[T]) catena.Seq[T]
 ```
 
-Merge yields the elements of every sequence as they arrive, each sequence running on a goroutine of its own. Elements of one sequence keep their order; the interleaving between sequences is whatever the timing makes it. It ends when all have ended. catena.MergeSorted is the unrelated sequential merge of sorted inputs. Each source runs at most one element ahead.
+Merge yields the elements of every sequence as they arrive, each sequence running on a goroutine of its own. Elements of one sequence keep their order; the interleaving between sequences is whatever the timing makes it. It ends when all have ended. Each source runs at most one element ahead.
 
 :::caution
 Starts one goroutine per sequence, plus one, per iteration, all joined before it returns, so stopping waits for every source's current step

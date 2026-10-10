@@ -19,7 +19,7 @@ Start here, read in roughly this order:
   are correct but wasteful, and for pipelines that never run.
 - **[Releasing](08-releasing.md)** — how a release is cut and verified.
 
-**[Operator reference](operators/README.md)** — all 199 operators across 16 pages,
+**[Operator reference](operators/README.md)** — all 197 operators across 16 pages,
 each with its signature, its memory and termination behaviour, and a
 worked example that `go test` runs and verifies. Generated from the
 library's own doc comments and its Example functions, so it cannot drift

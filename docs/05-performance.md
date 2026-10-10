@@ -189,15 +189,6 @@ bounded by distinct keys where `GroupBy` retains every element, and
   `iter.Pull` — a runtime coroutine. A zip pipeline measures ~35ns per
   element end to end, which the coroutine dominates. There is no
   cheaper way to do it; the cost is documented rather than hidden.
-- **`MergeSorted`** has the same cost for the same reason. The first
-  input is driven directly, like any source; every other input has to be
-  suspended between elements, so each of *their* elements costs a
-  coroutine switch. Two evenly interleaved inputs of 50k each merge in
-  2.0ms against 0.08ms for a hand-written merge of two slices — about
-  20ns per element, against under one. That is the price of merging
-  streams rather than slices, and it is why the longest input should go
-  first: its elements are the ones that cost nothing.
-  (`BenchmarkMergeSorted_*`.)
 - **`par`** starts a goroutine per element, which is what its callbacks
   need and what a hand-written concurrent loop does too. With a callback
   that does nothing, `par.Map` over 10k elements takes 3.2ms — about

@@ -169,7 +169,7 @@ you can judge what the nanoseconds buy.
 
 | Type | What it is |
 |---|---|
-| `Seq[T]` | lazy `iter.Seq[T]` with 89 methods — 41 chainable, 48 terminal; `range` works directly |
+| `Seq[T]` | lazy `iter.Seq[T]` with 88 methods — 40 chainable, 48 terminal; `range` works directly |
 | `Seq2[K, V]` | the stdlib pair currency; a bridge back to `Seq`, not a peer |
 | `Try[T]` | `iter.Seq2[T, error]`; error policy chosen by the consumer |
 | `List[T]` | eager `[]T` with the mirrored operation set — generated, and conformance-checked to agree with `AsSeq()` |
@@ -195,7 +195,7 @@ either kind, and `Then` keeps it unbroken:
 **[catena.nerdmenot.in](https://catena.nerdmenot.in)** — the documentation
 site: every guide and the full operator reference, versioned per release.
 
-**[Operator reference](docs/operators/README.md)** — all 199 operators
+**[Operator reference](docs/operators/README.md)** — all 197 operators
 across 16 pages, each with its signature, its memory and termination
 behaviour, and a worked example that `go test` runs and verifies.
 

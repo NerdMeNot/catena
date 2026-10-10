@@ -128,7 +128,7 @@ var families = []family{
 		Members: []string{
 			"Seq.Concat", "Seq.Append", "Seq.Prepend", "Chain",
 			"Seq.Zip", "Seq.ZipWithNext", "Seq.WithIndex", "Seq.JoinBy",
-			"Seq.LeftJoinBy", "Seq.GroupJoinBy", "MergeSorted", "Seq.MergeSortedWith", "Seq.Then",
+			"Seq.LeftJoinBy", "Seq.GroupJoinBy", "Seq.Then",
 			"Union", "Intersect", "Except",
 			"Seq.Intersperse", "Seq.IfEmpty",
 		},

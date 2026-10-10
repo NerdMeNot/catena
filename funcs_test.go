@@ -417,23 +417,3 @@ func TestFloatNaN(t *testing.T) {
 		t.Fatal("Sum must propagate NaN")
 	}
 }
-
-func init() {
-	registerSeqOps([]seqOp{
-		{
-			name:   "MergeSorted",
-			covers: []string{"MergeSorted"},
-			op: func(s catena.Seq[int]) catena.Seq[int] {
-				return catena.MergeSorted(s, nil, catena.FromSlice(mergeOther))
-			},
-			model: func(in []int) []int { return modelMerge(in, mergeOther) },
-			alloc: allocBounded,
-		},
-	}...)
-}
-
-func TestMergeSortedOfNothing(t *testing.T) {
-	if got := catena.MergeSorted[int]().Collect(); got != nil {
-		t.Fatalf("got %v", got)
-	}
-}

@@ -14,7 +14,6 @@ package catena
 
 import (
 	"context"
-	"iter"
 	"slices"
 )
 
@@ -312,98 +311,6 @@ func (s Seq[T]) Reversed() Seq[T] {
 		buf := s.Collect()
 		for i := len(buf) - 1; i >= 0; i-- {
 			if !yield(buf[i]) {
-				return
-			}
-		}
-	}
-}
-
-// MergeSortedWith merges s with others into one sequence ordered by cmp,
-// given that every input is already ordered by cmp; on unsorted input the
-// output is simply not sorted. Equal elements keep input order, the
-// receiver first. Lazy: it holds one element of each of others, and
-// consumes each of them at most one element past what it has yielded.
-// The receiver is consumed directly; each of others is consumed through
-// iter.Pull (its cleanup always runs), which costs a coroutine switch per
-// element — tens of nanoseconds — so put the longest input first.
-// catena.MergeSorted is the no-comparator form, for an ordered T.
-func (s Seq[T]) MergeSortedWith(cmp func(a, b T) int, others ...Seq[T]) Seq[T] {
-	return mergeSorted(cmp, append([]Seq[T]{s}, others...))
-}
-
-// mergeSorted is the shared k-way merge behind MergeSortedWith and
-// MergeSorted. The first input drives, by direct invocation like every
-// other operator; only the rest are pulled, since two push iterators
-// cannot be advanced in step without suspending one of them.
-func mergeSorted[T any](cmp func(a, b T) int, seqs []Seq[T]) Seq[T] {
-	return func(yield func(T) bool) {
-		if len(seqs) == 0 {
-			return
-		}
-		type head struct {
-			v    T
-			next func() (T, bool)
-		}
-		heads := make([]head, 0, len(seqs)-1)
-		stops := make([]func(), 0, len(seqs)-1)
-		defer func() {
-			for _, stop := range stops {
-				stop()
-			}
-		}()
-		for _, in := range seqs[1:] {
-			next, stop := iter.Pull(src(in))
-			stops = append(stops, stop)
-			if v, ok := next(); ok {
-				heads = append(heads, head{v, next})
-			}
-		}
-		// least finds the smallest pulled head. Strictly-less keeps the
-		// earliest input on ties, and deleting in place (below) keeps
-		// heads in input order.
-		least := func() int {
-			m := 0
-			for i := 1; i < len(heads); i++ {
-				if cmp(heads[i].v, heads[m].v) < 0 {
-					m = i
-				}
-			}
-			return m
-		}
-		// emit yields head m and advances its input.
-		emit := func(m int) bool {
-			if !yield(heads[m].v) {
-				return false
-			}
-			if v, ok := heads[m].next(); ok {
-				heads[m].v = v
-			} else {
-				heads = slices.Delete(heads, m, m+1)
-			}
-			return true
-		}
-		stopped := false
-		src(seqs[0])(func(v T) bool {
-			// Everything strictly smaller goes first; on a tie the
-			// first input, which v is from, wins.
-			for len(heads) > 0 {
-				m := least()
-				if cmp(heads[m].v, v) >= 0 {
-					break
-				}
-				if !emit(m) {
-					stopped = true
-					return false
-				}
-			}
-			if !yield(v) {
-				stopped = true
-				return false
-			}
-			return true
-		})
-		for !stopped && len(heads) > 0 {
-			if !emit(least()) {
 				return
 			}
 		}

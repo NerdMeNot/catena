@@ -8,7 +8,7 @@ operator's behavior is predictable from its name and doc comment.
 
 | Type | What it is | Evaluation |
 |---|---|---|
-| `Seq[T]` | `iter.Seq[T]` with 89 methods — 41 chainable, 48 terminal | lazy, possibly infinite |
+| `Seq[T]` | `iter.Seq[T]` with 88 methods — 40 chainable, 48 terminal | lazy, possibly infinite |
 | `Seq2[K, V]` | the stdlib pair currency; a *bridge* back to `Seq` | lazy |
 | `Try[T]` | `iter.Seq2[T, error]` — fallible elements | lazy |
 | `List[T]` | `[]T` with the mirrored operation set | eager |
