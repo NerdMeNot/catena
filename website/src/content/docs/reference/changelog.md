@@ -79,8 +79,8 @@ before — but it is no longer someone else's problem.
   `Sorted(s).First()` where `Min` holds one, `Distinct(Sorted(s))` where
   `Dedupe` holds none, a `GroupBy` used only to count — and the lazy
   sequence that is built and never consumed. It offers a fix only where
-  the replacement returns the same values of the same type. It is tagged
-  on its own line, `lint/v0.x`.
+  the replacement returns the same values of the same type. It carries
+  the library's version, under its own prefix: `lint/v1.5.0`.
 - Guides for [concurrency](/guides/concurrency/) and
   [linting](/guides/linting/), and
   [a lookup from lo, Kotlin and LINQ names](/guides/coming-from/) to
