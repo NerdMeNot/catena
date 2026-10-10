@@ -7,7 +7,7 @@ All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
 
-## [Unreleased]
+## [1.5.0] — 2026-10-10
 
 The largest release since the API froze: the places a chain had to stop
 are closed, and three packages now sit beside the core. Nothing existing
@@ -87,6 +87,11 @@ before — but it is no longer someone else's problem.
   catena's, every entry of which a test checks against the library.
   Reference pages for the two new packages, and `concurrency` and
   `sources` examples.
+
+### Documentation
+
+- The `v1.4.x` series is archived at `/1-4/`, per the rule that a minor
+  series is snapshotted when the next minor ships.
 
 ### Changed
 
@@ -335,6 +340,7 @@ it is retracted in `go.mod` and should not be used. Start here.
   `range`, which makes a 4-stage pipeline 25% faster than the same
   pipeline hand-built from raw closures.
 
+[1.5.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.5.0
 [1.4.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.4.0
 [1.3.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.3.0
 [1.2.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.2.0
