@@ -34,6 +34,27 @@ func Distinct[T comparable](s Seq[T]) Seq[T] {
 	}
 }
 
+// Duplicates yields the elements that occur more than once: each such
+// value once, at its second occurrence, so in the order values were first
+// repeated. ⚠ Retains one entry per distinct value — unbounded.
+func Duplicates[T comparable](s Seq[T]) Seq[T] {
+	return func(yield func(T) bool) {
+		reported := make(map[T]bool) // present: seen; true: already yielded
+		src(s)(func(v T) bool {
+			done, seen := reported[v]
+			if !seen {
+				reported[v] = false
+				return true
+			}
+			if done {
+				return true
+			}
+			reported[v] = true
+			return yield(v)
+		})
+	}
+}
+
 // Dedupe yields elements that differ from their predecessor — consecutive
 // duplicates only, O(1) memory.
 func Dedupe[T comparable](s Seq[T]) Seq[T] {
@@ -48,6 +69,24 @@ func Dedupe[T comparable](s Seq[T]) Seq[T] {
 			return yield(v)
 		})
 	}
+}
+
+// IsSorted reports whether the elements are in ascending order; an empty
+// or one-element sequence is sorted. NaN orders below everything
+// (cmp.Compare), as it does for Sorted. It stops at the first pair out of
+// order, so on infinite input it returns only if there is one.
+func IsSorted[T cmp.Ordered](s Seq[T]) bool {
+	var prev T
+	have, sorted := false, true
+	src(s)(func(v T) bool {
+		if have && cmp.Compare(prev, v) > 0 {
+			sorted = false
+			return false
+		}
+		prev, have = v, true
+		return true
+	})
+	return sorted
 }
 
 // Sorted yields the elements in ascending order, stably. NaN sorts first.

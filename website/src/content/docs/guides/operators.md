@@ -47,6 +47,7 @@ a warning.
 | `DistinctWith` | [S] ⚠ mem distinct; O(n²) compares — small inputs |
 | `Reversed` | ⚠ mem all, ⚠∞ |
 | `Once` | panics on second consumption — a development guard |
+| `IsSortedWith(cmp)` | ◐ stops at the first pair out of order |
 | `Then(f)` | returns `f(s)` — chains package functions and `parallel` stages |
 | `UntilDone(ctx)` | → `Try`; yields ctx.Err() and stops on cancellation |
 
@@ -63,6 +64,8 @@ a warning.
 | `Zip(other)` | → `Seq2`; stops at the shorter side; other via `iter.Pull` |
 | `MapErr`, `FilterErr` | → `Try`; a failed callback yields (zero, err) |
 | `DistinctBy(sel)` | [S] ⚠ mem distinct keys; first wins |
+| `DuplicatesBy(sel)` | [S] ⚠ mem distinct keys; each repeated key once, at its second element |
+| `IsSortedBy(sel)` | ◐ stops at the first pair out of order; sel once per element |
 | `DedupeBy(sel)` | [S] O(1); consecutive duplicates only |
 | `SortedBy`, `SortedByDesc` | ⚠ mem all, ⚠∞; stable; sel once per element |
 | `JoinBy` | inner hash join; ⚠ mem right side, buffered before first emission |
@@ -80,6 +83,7 @@ a warning.
 | `ForEach`, `ForEachIndexed`, `Drain` | ⚠∞ |
 | `ForEachErr` | ◐ stops at the first error f returns |
 | `First` | |
+| `FirstOr(fallback)`, `LastOr(fallback)` | the element, or the fallback when empty; `LastOr` is ⚠∞ |
 | `Last`, `FindLast` | ⚠∞ |
 | `Single` | ◐ true iff exactly one; stops at the second element |
 | `ElementAt(i)` | negative i → (zero, false), consumes nothing |
@@ -116,6 +120,7 @@ All ⚠∞; `cmp.Compare` ordering (NaN below everything); ties first-wins;
 | `MaxOf`, `MinOf`, `MinMaxOf` | the extreme *key*; MinMaxOf in one pass |
 | `MaxWith`, `MinWith` | comparator forms |
 | `TopNBy`, `BottomNBy` | ⚠ mem n; sorted output; stable at the cut |
+| `Sample(n, rng)` | ⚠∞ ⚠ mem n; n elements uniformly at random, in encounter order; nil rng is the shared generator |
 | `SumOf`, `ProductOf` | wraps like +; empty product is 1 |
 | `AverageOf` | float64 accumulation; (0, false) on empty |
 | `JoinToString` | |
@@ -128,6 +133,8 @@ of `T`.
 | Operator | Notes |
 |---|---|
 | `Distinct`, `Dedupe` | [S]; first wins / consecutive only |
+| `Duplicates` | [S] ⚠ mem distinct; each repeated value once, at its second occurrence |
+| `IsSorted` | ◐ stops at the first pair out of order |
 | `Sorted`, `SortedDesc` | ⚠ mem all, ⚠∞; stable |
 | `Sum`, `Product`, `Average`, `Max`, `Min`, `MinMax`, `TopN`, `BottomN` | ⚠∞ |
 | `Contains`, `IndexOf` | ◐ |

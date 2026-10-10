@@ -209,6 +209,34 @@ fmt.Println(catena.Of(5, 1, 9, 3, 7).BottomNBy(2, catena.Self[int]))
 [1 3]
 ```
 
+## Sample
+
+```go
+func (s Seq[T]) Sample(n int, rng *rand.Rand) []T
+```
+
+Sample returns n elements chosen at random, every set of n being equally likely, in encounter order; all of them if the sequence has n or fewer. Memory is O(n) — reservoir sampling, the streaming alternative to collecting everything and shuffling. rng supplies the randomness, so a seeded one makes the choice repeatable; nil uses math/rand/v2's shared generator. Panics if n is negative.
+
+:::caution
+Full drain
+:::
+
+```go
+// Five of a million, each equally likely, holding five in memory.
+// A seeded generator makes the choice repeatable; pass nil for the
+// shared one.
+rng := rand.New(rand.NewPCG(1, 2))
+fmt.Println(len(catena.Range(0, 1_000_000, 1).Sample(5, rng)))
+
+// A short sequence is returned whole, in order.
+fmt.Println(catena.Of("a", "b").Sample(5, rng))
+```
+
+```
+5
+[a b]
+```
+
 ## Max
 
 ```go

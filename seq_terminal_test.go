@@ -395,3 +395,41 @@ func TestElementAtNegative(t *testing.T) {
 		t.Fatalf("negative index consumed %d elements", consumed)
 	}
 }
+
+func init() {
+	registerTermOps([]termOp{
+		{
+			name:   "FirstOr",
+			covers: []string{"FirstOr"},
+			op:     func(s catena.Seq[int]) any { return s.FirstOr(-7) },
+			model: func(in []int) any {
+				if len(in) == 0 {
+					return -7
+				}
+				return in[0]
+			},
+			infOp: func(s catena.Seq[int]) any { return s.FirstOr(-7) },
+		},
+		{
+			name:   "LastOr",
+			covers: []string{"LastOr"},
+			op:     func(s catena.Seq[int]) any { return s.LastOr(-7) },
+			model: func(in []int) any {
+				if len(in) == 0 {
+					return -7
+				}
+				return in[len(in)-1]
+			},
+		},
+		{
+			name:   "IsSortedWith",
+			covers: []string{"IsSortedWith"},
+			op:     func(s catena.Seq[int]) any { return s.IsSortedWith(func(a, b int) int { return a - b }) },
+			model:  func(in []int) any { return slices.IsSorted(in) },
+			// 0, -1, ...: out of order at the second element.
+			infOp: func(s catena.Seq[int]) any {
+				return s.IsSortedWith(func(a, b int) int { return b - a })
+			},
+		},
+	}...)
+}

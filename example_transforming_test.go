@@ -228,6 +228,47 @@ func ExampleSeq_Then() {
 	// Output: [[a b] [c]]
 }
 
+func ExampleDuplicates() {
+	// Each value that occurs more than once, once — in the order the
+	// repeats were found.
+	ids := catena.Of(7, 3, 7, 9, 3, 7)
+	fmt.Println(catena.Duplicates(ids).Collect())
+	// Output: [7 3]
+}
+
+func ExampleSeq_DuplicatesBy() {
+	// The element reported is the one that repeats the key: here, the
+	// second signup with each address.
+	type signup struct {
+		Email string
+		Name  string
+	}
+	signups := catena.Of(
+		signup{"ada@x.io", "ada"}, signup{"bob@x.io", "bob"}, signup{"ada@x.io", "ada2"},
+	)
+	fmt.Println(signups.DuplicatesBy(func(s signup) string { return s.Email }).Collect())
+	// Output: [{ada@x.io ada2}]
+}
+
+func ExampleIsSorted() {
+	// One pass, no buffer, and it stops at the first pair out of order.
+	fmt.Println(catena.IsSorted(catena.Of(1, 2, 2, 5)), catena.IsSorted(catena.Of(1, 3, 2)))
+	// Output: true false
+}
+
+func ExampleSeq_IsSortedBy() {
+	words := catena.Of("go", "zig", "rust", "kotlin")
+	fmt.Println(words.IsSortedBy(func(w string) int { return len(w) }))
+	// Output: true
+}
+
+func ExampleSeq_IsSortedWith() {
+	// Any ordering: here, descending.
+	scores := catena.Of(90, 85, 85, 70)
+	fmt.Println(scores.IsSortedWith(func(a, b int) int { return b - a }))
+	// Output: true
+}
+
 func ExampleUnion() {
 	// Set semantics: the result is deduplicated, in encounter order,
 	// left operand first.

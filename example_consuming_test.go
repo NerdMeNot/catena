@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"strings"
 
@@ -294,6 +295,34 @@ func ExampleSeq_Reduce() {
 	_, empty := catena.Empty[int]().Reduce(func(a, b int) int { return a })
 	fmt.Println(v, ok, empty)
 	// Output: 6 true false
+}
+
+func ExampleSeq_FirstOr() {
+	// First, for use inside an expression: no second result to check.
+	ports := catena.Of(8080, 8081)
+	var none catena.Seq[int]
+	fmt.Println(ports.FirstOr(80), none.FirstOr(80))
+	// Output: 8080 80
+}
+
+func ExampleSeq_LastOr() {
+	versions := catena.Of("v1", "v2", "v3")
+	fmt.Println(versions.LastOr("v0"), catena.Empty[string]().LastOr("v0"))
+	// Output: v3 v0
+}
+
+func ExampleSeq_Sample() {
+	// Five of a million, each equally likely, holding five in memory.
+	// A seeded generator makes the choice repeatable; pass nil for the
+	// shared one.
+	rng := rand.New(rand.NewPCG(1, 2))
+	fmt.Println(len(catena.Range(0, 1_000_000, 1).Sample(5, rng)))
+
+	// A short sequence is returned whole, in order.
+	fmt.Println(catena.Of("a", "b").Sample(5, rng))
+	// Output:
+	// 5
+	// [a b]
 }
 
 func ExampleSeq_FoldedBy() {

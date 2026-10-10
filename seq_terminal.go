@@ -121,6 +121,44 @@ func (s Seq[T]) First() (T, bool) {
 	return got, true
 }
 
+// FirstOr returns the first element, or fallback if the sequence is
+// empty — First for use inside an expression.
+func (s Seq[T]) FirstOr(fallback T) T {
+	src(s)(func(v T) bool {
+		fallback = v
+		return false
+	})
+	return fallback
+}
+
+// LastOr returns the final element, or fallback if the sequence is empty.
+// ⚠ Full drain.
+func (s Seq[T]) LastOr(fallback T) T {
+	src(s)(func(v T) bool {
+		fallback = v
+		return true
+	})
+	return fallback
+}
+
+// IsSortedWith reports whether no element orders before its predecessor
+// under cmp; an empty or one-element sequence is sorted. It stops at the
+// first pair out of order, so on infinite input it returns only if there
+// is one. catena.IsSorted is the no-comparator form, for an ordered T.
+func (s Seq[T]) IsSortedWith(cmp func(a, b T) int) bool {
+	var prev T
+	have, sorted := false, true
+	src(s)(func(v T) bool {
+		if have && cmp(prev, v) > 0 {
+			sorted = false
+			return false
+		}
+		prev, have = v, true
+		return true
+	})
+	return sorted
+}
+
 // Last returns the final element. ⚠ Full drain.
 func (s Seq[T]) Last() (T, bool) {
 	var last T

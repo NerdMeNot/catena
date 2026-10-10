@@ -73,6 +73,7 @@ var families = []family{
 		Members: []string{
 			"Seq.Filter", "Seq.FilterNot", "Seq.FilterIndexed", "Seq.FilterErr",
 			"Distinct", "Seq.DistinctBy", "Seq.DistinctWith",
+			"Duplicates", "Seq.DuplicatesBy",
 			"Dedupe", "Seq.DedupeBy",
 			"NonZero",
 		},
@@ -144,6 +145,7 @@ var families = []family{
 			"Sorted", "SortedDesc",
 			"Seq.SortedBy", "Seq.SortedByDesc", "Seq.SortedWith",
 			"Seq.Reversed",
+			"IsSorted", "Seq.IsSortedBy", "Seq.IsSortedWith",
 		},
 	},
 	{
@@ -180,7 +182,7 @@ var families = []family{
 			"answer is settled, so they terminate on an infinite source; Last, Count and " +
 			"FindLast cannot, because the answer depends on the final element.",
 		Members: []string{
-			"Seq.First", "Seq.Last", "Seq.Single", "Seq.ElementAt",
+			"Seq.First", "Seq.FirstOr", "Seq.Last", "Seq.LastOr", "Seq.Single", "Seq.ElementAt",
 			"Seq.Find", "Seq.FindLast", "Seq.FindIndex", "Seq.FindMap",
 			"Seq.Any", "Seq.All", "Seq.None",
 			"Seq.Count", "Seq.CountWhere", "Seq.IsEmpty",
@@ -214,7 +216,7 @@ var families = []family{
 			"a large scan — a bounded heap rather than a full sort.",
 		Members: []string{
 			"Seq.MaxBy", "Seq.MinBy", "Seq.MaxOf", "Seq.MinOf", "Seq.MinMaxOf",
-			"Seq.MaxWith", "Seq.MinWith", "Seq.TopNBy", "Seq.BottomNBy",
+			"Seq.MaxWith", "Seq.MinWith", "Seq.TopNBy", "Seq.BottomNBy", "Seq.Sample",
 			"Max", "Min", "MinMax", "TopN", "BottomN",
 			"Seq.SumOf", "Seq.ProductOf", "Seq.AverageOf", "Sum", "Product", "Average",
 			"Seq.JoinToString", "Join",

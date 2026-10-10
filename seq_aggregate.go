@@ -7,6 +7,8 @@ package catena
 
 import (
 	"cmp"
+	"math"
+	"math/rand/v2"
 	"slices"
 	"strings"
 )
@@ -290,4 +292,70 @@ func (s Seq[T]) JoinToString(sep string, sel func(T) string) string {
 		return true
 	})
 	return b.String()
+}
+
+// Sample returns n elements chosen at random, every set of n being
+// equally likely, in encounter order; all of them if the sequence has n
+// or fewer. Memory is O(n) — reservoir sampling, the streaming
+// alternative to collecting everything and shuffling. rng supplies the
+// randomness, so a seeded one makes the choice repeatable; nil uses
+// math/rand/v2's shared generator. ⚠ Full drain. Panics if n is negative.
+func (s Seq[T]) Sample(n int, rng *rand.Rand) []T {
+	negCheck("Sample", n)
+	if n == 0 {
+		return nil
+	}
+	float, intn := rand.Float64, rand.IntN
+	if rng != nil {
+		float, intn = rng.Float64, rng.IntN
+	}
+	// unit is uniform on (0, 1]: never 0, so its logarithm is finite.
+	unit := func() float64 { return 1 - float() }
+
+	// Algorithm L (Li, 1994). The reservoir fills with the first n
+	// elements; after that each later element replaces a random one with
+	// a probability that shrinks as the sequence goes on. Rather than
+	// draw a number per element to decide, it draws how many elements to
+	// skip until the next replacement — so the random draws number about
+	// n·log(N/n) for N elements, not N.
+	type pick struct {
+		v   T
+		idx int
+	}
+	reservoir := make([]pick, 0, n)
+	w := 1.0
+	skip := 0
+	advance := func() {
+		w *= math.Exp(math.Log(unit()) / float64(n))
+		// As w nears 1 the skip grows without bound; past what an int
+		// holds it is simply "never again".
+		skip = int(min(math.Floor(math.Log(unit())/math.Log(1-w)), math.MaxInt32))
+	}
+	idx := 0
+	src(s)(func(v T) bool {
+		i := idx
+		idx++
+		if len(reservoir) < n {
+			if reservoir = append(reservoir, pick{v, i}); len(reservoir) == n {
+				advance()
+			}
+			return true
+		}
+		if skip > 0 {
+			skip--
+			return true
+		}
+		reservoir[intn(n)] = pick{v, i}
+		advance()
+		return true
+	})
+	if len(reservoir) == 0 {
+		return nil // nil-for-empty, like every slice-returning terminal
+	}
+	slices.SortFunc(reservoir, func(a, b pick) int { return cmp.Compare(a.idx, b.idx) })
+	out := make([]T, len(reservoir))
+	for i, p := range reservoir {
+		out[i] = p.v
+	}
+	return out
 }

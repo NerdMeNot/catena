@@ -25,6 +25,25 @@ fmt.Println(v, ok, empty)
 3 true false
 ```
 
+## FirstOr
+
+```go
+func (s Seq[T]) FirstOr(fallback T) T
+```
+
+FirstOr returns the first element, or fallback if the sequence is empty — First for use inside an expression.
+
+```go
+// First, for use inside an expression: no second result to check.
+ports := catena.Of(8080, 8081)
+var none catena.Seq[int]
+fmt.Println(ports.FirstOr(80), none.FirstOr(80))
+```
+
+```
+8080 80
+```
+
 ## Last
 
 ```go
@@ -44,6 +63,27 @@ fmt.Println(v, ok)
 
 ```
 1 true
+```
+
+## LastOr
+
+```go
+func (s Seq[T]) LastOr(fallback T) T
+```
+
+LastOr returns the final element, or fallback if the sequence is empty.
+
+:::caution
+Full drain
+:::
+
+```go
+versions := catena.Of("v1", "v2", "v3")
+fmt.Println(versions.LastOr("v0"), catena.Empty[string]().LastOr("v0"))
+```
+
+```
+v3 v0
 ```
 
 ## Single

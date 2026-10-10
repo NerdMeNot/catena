@@ -417,3 +417,48 @@ func TestFloatNaN(t *testing.T) {
 		t.Fatal("Sum must propagate NaN")
 	}
 }
+
+func init() {
+	registerSeqOps([]seqOp{
+		{
+			name:   "Duplicates",
+			covers: []string{"Duplicates"},
+			// Folded to five values so that an endless source repeats:
+			// with nothing to yield, nothing downstream could stop it.
+			op: func(s catena.Seq[int]) catena.Seq[int] {
+				return catena.Duplicates(s.Map(func(v int) int { return ((v % 5) + 5) % 5 }))
+			},
+			model: func(in []int) []int {
+				var folded []int
+				for _, v := range in {
+					folded = append(folded, ((v%5)+5)%5)
+				}
+				return modelDuplicates(folded, catena.Self[int])
+			},
+			alloc: allocUnbounded,
+		},
+	}...)
+	registerTermOps([]termOp{
+		{
+			name:   "IsSorted",
+			covers: []string{"IsSorted"},
+			op:     func(s catena.Seq[int]) any { return catena.IsSorted(s) },
+			model:  func(in []int) any { return slices.IsSorted(in) },
+			infOp: func(s catena.Seq[int]) any {
+				return catena.IsSorted(s.Map(func(v int) int { return -v }))
+			},
+		},
+	}...)
+}
+
+func TestIsSortedTreatsNaNAsSortedDoes(t *testing.T) {
+	nan := math.NaN()
+	// NaN orders below everything, so it belongs first — and what Sorted
+	// produces must always count as sorted.
+	if !catena.IsSorted(catena.Of(nan, nan, -1, 0, 2)) || catena.IsSorted(catena.Of(1, nan)) {
+		t.Fatal("NaN is not ordered below everything")
+	}
+	if !catena.IsSorted(catena.Sorted(catena.Of(2, nan, -1, nan, 0))) {
+		t.Fatal("the output of Sorted is not sorted")
+	}
+}
