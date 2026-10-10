@@ -121,3 +121,45 @@ func TestBatchEarlyBreaks(t *testing.T) {
 		}
 	})
 }
+
+func init() {
+	mod3 := func(v int) int { return ((v % 3) + 3) % 3 }
+	registerSeqOps([]seqOp{
+		{
+			name:   "GroupedBy_MapTo",
+			covers: []string{"GroupedBy"},
+			op: func(s catena.Seq[int]) catena.Seq[int] {
+				return catena.FlattenSlices(catena.GroupedBy(s, mod3).
+					MapTo(func(k int, vs []int) []int { return append([]int{k}, vs...) }))
+			},
+			model: func(in []int) []int {
+				var keys []int
+				buckets := map[int][]int{}
+				for _, v := range in {
+					k := mod3(v)
+					if _, ok := buckets[k]; !ok {
+						keys = append(keys, k)
+					}
+					buckets[k] = append(buckets[k], v)
+				}
+				var out []int
+				for _, k := range keys { // key, then its bucket in encounter order
+					out = append(append(out, k), buckets[k]...)
+				}
+				return out
+			},
+			drains: true,
+			alloc:  allocUnbounded,
+		},
+	}...)
+}
+
+func TestGroupedByBucketsAreFresh(t *testing.T) {
+	g := catena.GroupedBy(catena.Of(1, 2, 3, 4), func(v int) int { return v % 2 })
+	_, first := catena.Unzip(g)
+	first[0][0] = 99
+	_, second := catena.Unzip(g)
+	if second[0][0] != 1 {
+		t.Fatalf("a retained bucket aliased a later iteration: %v", second)
+	}
+}

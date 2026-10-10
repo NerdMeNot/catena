@@ -297,7 +297,7 @@ func emitDelegation(out *bytes.Buffer, fset *token.FileSet, d *ast.FuncDecl) {
 }
 
 // mirrorDoc is the doc comment for a delegated mirror. Most mirrors consume
-// the list and hand back an eager value, but four of them mirror a Seq
+// the list and hand back an eager value, but a few of them mirror a Seq
 // operator whose own result is lazy (Seq2 or Try). Saying "eagerly" and
 // nothing else would leave a List user holding a lazy pipeline believing they
 // held a finished value, so those name the crossing.
@@ -313,8 +313,8 @@ func mirrorDoc(name, resultStr string) string {
 		return fmt.Sprintf("// %s mirrors Seq.%s eagerly.\n", name, name)
 	}
 	return fmt.Sprintf("// %s mirrors Seq.%s. The list is consumed eagerly, but the\n"+
-		"// result is a lazy %s — one of the four List operators that cross back\n"+
-		"// to lazy (see the List type).\n", name, name, lazy)
+		"// result is a lazy %s — one of the List operators that cross back to\n"+
+		"// lazy (see the List type).\n", name, name, lazy)
 }
 
 // seqInstance reports whether t is Seq[X], returning X.

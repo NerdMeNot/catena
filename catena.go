@@ -105,9 +105,9 @@ type Try[T any] iter.Seq2[T, error]
 // ToList, as catena.Sorted(l.AsSeq()).ToList(). Concat likewise takes a Seq,
 // so it is l1.Concat(l2.AsSeq()).
 //
-// Four mirrored operators cross back to lazy, because their Seq counterparts
-// return a lazy type: WithIndex and ZipWithNext return Seq2, MapErr and
-// FilterErr return Try.
+// A few mirrored operators cross back to lazy, because their Seq
+// counterparts return a lazy type: WithIndex, ZipWithNext and FoldedBy
+// return Seq2, MapErr and FilterErr return Try.
 type List[T any] []T
 
 // Numeric is the constraint for arithmetic aggregations (Sum, Product,

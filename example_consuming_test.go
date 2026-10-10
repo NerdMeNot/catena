@@ -296,6 +296,34 @@ func ExampleSeq_Reduce() {
 	// Output: 6 true false
 }
 
+func ExampleSeq_FoldedBy() {
+	// FoldBy that stays in the chain: keys come out in the order they
+	// were first seen, so the result is deterministic and keeps flowing.
+	words := catena.Of("pear", "apple", "plum", "avocado", "fig")
+	fmt.Println(words.
+		FoldedBy(
+			func(w string) byte { return w[0] },
+			func(byte) int { return 0 },
+			func(n int, w string) int { return n + len(w) },
+		).
+		MapTo(func(initial byte, letters int) string { return fmt.Sprintf("%c=%d", initial, letters) }).
+		Collect())
+	// Output: [p=8 a=12 f=3]
+}
+
+func ExampleGroupedBy() {
+	// GroupBy in first-seen key order, as a sequence of pairs rather
+	// than a map.
+	words := catena.Of("pear", "apple", "plum", "fig")
+	for initial, group := range catena.GroupedBy(words, func(w string) byte { return w[0] }) {
+		fmt.Printf("%c %v\n", initial, group)
+	}
+	// Output:
+	// p [pear plum]
+	// a [apple]
+	// f [fig]
+}
+
 func ExampleSeq_GroupBy() {
 	// Retains every element. For an aggregate, FoldBy is bounded by keys.
 	byParity := catena.Range(1, 6, 1).GroupBy(func(n int) string {

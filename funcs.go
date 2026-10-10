@@ -50,6 +50,13 @@ func Dedupe[T comparable](s Seq[T]) Seq[T] {
 	}
 }
 
+// MergeSorted merges already-sorted sequences into one sorted sequence;
+// equal elements keep argument order. Lazy, holding one element per input:
+// see Seq.MergeSortedWith, which this is for an ordered T.
+func MergeSorted[T cmp.Ordered](seqs ...Seq[T]) Seq[T] {
+	return mergeSorted(cmp.Compare[T], seqs)
+}
+
 // Sorted yields the elements in ascending order, stably. NaN sorts first.
 // ⚠ Buffers the entire input.
 func Sorted[T cmp.Ordered](s Seq[T]) Seq[T] {

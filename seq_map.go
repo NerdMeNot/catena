@@ -265,3 +265,61 @@ func (s Seq[T]) JoinBy[U any, K comparable, R any](
 		})
 	}
 }
+
+// LeftJoinBy is a relational left outer join: like JoinBy, but a left
+// element with no match is kept, and combine is called for it once with
+// the zero U and false. Matched elements call combine with true once per
+// match, so duplicate keys produce the cross product per key. Output
+// order is left encounter order, then right encounter order within a key.
+// ⚠ Buffers all of other before the first emission.
+func (s Seq[T]) LeftJoinBy[U any, K comparable, R any](
+	other Seq[U],
+	leftKey func(T) K, rightKey func(U) K,
+	combine func(T, U, bool) R,
+) Seq[R] {
+	return func(yield func(R) bool) {
+		right := make(map[K][]U)
+		src(other)(func(u U) bool {
+			k := rightKey(u)
+			right[k] = append(right[k], u)
+			return true
+		})
+		src(s)(func(v T) bool {
+			matches := right[leftKey(v)]
+			if len(matches) == 0 {
+				var zero U
+				return yield(combine(v, zero, false))
+			}
+			for _, u := range matches {
+				if !yield(combine(v, u, true)) {
+					return false
+				}
+			}
+			return true
+		})
+	}
+}
+
+// GroupJoinBy pairs each element of s with all the elements of other
+// sharing its key, yielding combine exactly once per left element — the
+// one-to-many join that keeps the many together. matches is in right
+// encounter order and nil when nothing matches. It is shared by every left
+// element with that key: retain it freely, but do not modify it. ⚠ Buffers
+// all of other before the first emission.
+func (s Seq[T]) GroupJoinBy[U any, K comparable, R any](
+	other Seq[U],
+	leftKey func(T) K, rightKey func(U) K,
+	combine func(T, []U) R,
+) Seq[R] {
+	return func(yield func(R) bool) {
+		right := make(map[K][]U)
+		src(other)(func(u U) bool {
+			k := rightKey(u)
+			right[k] = append(right[k], u)
+			return true
+		})
+		src(s)(func(v T) bool {
+			return yield(combine(v, right[leftKey(v)]))
+		})
+	}
+}

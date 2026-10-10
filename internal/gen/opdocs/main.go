@@ -110,6 +110,7 @@ var families = []family{
 		Members: []string{
 			"Seq.Concat", "Seq.Append", "Seq.Prepend", "Chain",
 			"Seq.Zip", "Seq.ZipWithNext", "Seq.WithIndex", "Seq.JoinBy",
+			"Seq.LeftJoinBy", "Seq.GroupJoinBy", "MergeSorted", "Seq.MergeSortedWith", "Seq.Then",
 			"Union", "Intersect", "Except",
 			"Seq.Intersperse", "Seq.IfEmpty",
 		},
@@ -179,6 +180,7 @@ var families = []family{
 		Members: []string{
 			"Seq.Fold", "Seq.FoldIndexed", "Seq.FoldWhile", "Seq.FoldErr",
 			"Seq.FoldBy", "Seq.Reduce",
+			"Seq.FoldedBy", "GroupedBy",
 			"Seq.GroupBy", "Seq.IndexBy", "Seq.TallyBy", "Seq.Associate", "Seq.Partition",
 			"AssociateWith", "Tally", "ToKeySet",
 		},
@@ -251,9 +253,9 @@ var families = []family{
 			"`Contains`, `Union`, `Chunked`, …) are not part of that mirror: they take a " +
 			"`Seq`, so reach them through `AsSeq` and come back with `ToList` — " +
 			"`catena.Sorted(l.AsSeq()).ToList()`. `Concat` likewise takes a `Seq`, so it " +
-			"is `l1.Concat(l2.AsSeq())`. And four mirrored operators cross back to lazy " +
-			"because their `Seq` counterparts do: `WithIndex` and `ZipWithNext` return " +
-			"`Seq2`, `MapErr` and `FilterErr` return `Try`.",
+			"is `l1.Concat(l2.AsSeq())`. And a few mirrored operators cross back to lazy " +
+			"because their `Seq` counterparts do: `WithIndex`, `ZipWithNext` and `FoldedBy` " +
+			"return `Seq2`, `MapErr` and `FilterErr` return `Try`.",
 		Members: []string{
 			"List.Len", "List.At", "List.Get", "List.Slice", "List.Clone",
 			"List.AsSeq", "List.FoldRight", "List.Append",
@@ -338,7 +340,7 @@ func main() {
 		// The generated List mirror is exempt: each of those methods is
 		// conformance-checked to behave exactly as the Seq operator of the
 		// same name does over AsSeq(), so it is documented by that entry.
-		// The Eager page explains the rule; 77 duplicate entries would
+		// The Eager page explains the rule; dozens of duplicate entries would
 		// bury the reference rather than complete it.
 		if after, ok := strings.CutPrefix(name, "List."); ok && documented["Seq."+after] {
 			continue

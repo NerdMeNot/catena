@@ -200,3 +200,41 @@ func init() {
 		},
 	}...)
 }
+
+func init() {
+	mod3 := func(v int) int { return ((v % 3) + 3) % 3 }
+	registerSeqOps([]seqOp{
+		{
+			name:   "FoldedBy_MapTo",
+			covers: []string{"FoldedBy"},
+			op: func(s catena.Seq[int]) catena.Seq[int] {
+				return s.FoldedBy(mod3,
+					func(k int) int { return k * 100000 },
+					func(a, v int) int { return a + v },
+				).MapTo(func(k, a int) int { return k*10000000 + a })
+			},
+			model: func(in []int) []int {
+				var keys, accs []int // first-seen key order is the contract
+				for _, v := range in {
+					k := mod3(v)
+					i := 0
+					for i < len(keys) && keys[i] != k {
+						i++
+					}
+					if i == len(keys) {
+						keys = append(keys, k)
+						accs = append(accs, k*100000)
+					}
+					accs[i] += v
+				}
+				var out []int
+				for i, k := range keys {
+					out = append(out, k*10000000+accs[i])
+				}
+				return out
+			},
+			drains: true,
+			alloc:  allocUnbounded,
+		},
+	}...)
+}

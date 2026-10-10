@@ -284,3 +284,80 @@ func TestSeqMapEarlyBreaks(t *testing.T) {
 		}
 	})
 }
+
+func init() {
+	mod3 := func(v int) int { return ((v % 3) + 3) % 3 }
+	registerSeqOps([]seqOp{
+		{
+			name:   "LeftJoinBy",
+			covers: []string{"LeftJoinBy"},
+			op: func(s catena.Seq[int]) catena.Seq[int] {
+				return s.LeftJoinBy(catena.Of(0, 1, 1), mod3, catena.Self[int],
+					func(v, u int, ok bool) int {
+						if !ok {
+							return -v - 1000
+						}
+						return v*10 + u
+					})
+			},
+			model: func(in []int) []int {
+				right := map[int][]int{0: {0}, 1: {1, 1}}
+				var out []int
+				for _, v := range in {
+					matches := right[mod3(v)]
+					if len(matches) == 0 {
+						out = append(out, -v-1000) // unmatched left rows survive
+					}
+					for _, u := range matches {
+						out = append(out, v*10+u)
+					}
+				}
+				return out
+			},
+			panicOp: func(s catena.Seq[int]) catena.Seq[int] {
+				return s.LeftJoinBy(catena.Of(0, 1, 2), mod3, catena.Self[int],
+					func(int, int, bool) int { panic("callback boom") })
+			},
+			alloc: allocBounded,
+		},
+		{
+			name:   "GroupJoinBy",
+			covers: []string{"GroupJoinBy"},
+			op: func(s catena.Seq[int]) catena.Seq[int] {
+				return s.GroupJoinBy(catena.Of(0, 1, 1, 7), mod3, mod3,
+					func(v int, us []int) int {
+						sum := 0
+						for _, u := range us {
+							sum += u
+						}
+						return v*1000 + len(us)*100 + sum
+					})
+			},
+			model: func(in []int) []int {
+				right := map[int][]int{0: {0}, 1: {1, 1, 7}}
+				var out []int
+				for _, v := range in { // exactly one output per left element
+					sum := 0
+					for _, u := range right[mod3(v)] {
+						sum += u
+					}
+					out = append(out, v*1000+len(right[mod3(v)])*100+sum)
+				}
+				return out
+			},
+			alloc: allocBounded,
+		},
+	}...)
+}
+
+func TestGroupJoinByMatches(t *testing.T) {
+	// Nil for no match, right encounter order otherwise, and the same
+	// backing slice for every left element sharing a key.
+	var got [][]int
+	catena.Of(1, 2, 1).GroupJoinBy(catena.Of(10, 11, 30),
+		catena.Self[int], func(u int) int { return u / 10 },
+		func(_ int, us []int) int { got = append(got, us); return 0 }).Drain()
+	if !slices.Equal(got[0], []int{10, 11}) || got[1] != nil || &got[0][0] != &got[2][0] {
+		t.Fatalf("matches = %v", got)
+	}
+}

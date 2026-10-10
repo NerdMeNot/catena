@@ -107,6 +107,11 @@ func (l List[T]) Reversed() List[T] {
 	return List[T](out)
 }
 
+// MergeSortedWith mirrors Seq.MergeSortedWith eagerly.
+func (l List[T]) MergeSortedWith(cmp func(a, b T) int, others ...Seq[T]) List[T] {
+	return List[T](FromSlice([]T(l)).MergeSortedWith(cmp, others...).Collect())
+}
+
 // Map mirrors Seq.Map eagerly, implemented directly over the
 // backing slice rather than through the lazy pipeline.
 func (l List[T]) Map[U any](f func(T) U) List[U] {
@@ -154,29 +159,29 @@ func (l List[T]) Scan[A any](init A, f func(A, T) A) List[A] {
 }
 
 // WithIndex mirrors Seq.WithIndex. The list is consumed eagerly, but the
-// result is a lazy Seq2 — one of the four List operators that cross back
-// to lazy (see the List type).
+// result is a lazy Seq2 — one of the List operators that cross back to
+// lazy (see the List type).
 func (l List[T]) WithIndex() Seq2[int, T] {
 	return FromSlice([]T(l)).WithIndex()
 }
 
 // ZipWithNext mirrors Seq.ZipWithNext. The list is consumed eagerly, but the
-// result is a lazy Seq2 — one of the four List operators that cross back
-// to lazy (see the List type).
+// result is a lazy Seq2 — one of the List operators that cross back to
+// lazy (see the List type).
 func (l List[T]) ZipWithNext() Seq2[T, T] {
 	return FromSlice([]T(l)).ZipWithNext()
 }
 
 // MapErr mirrors Seq.MapErr. The list is consumed eagerly, but the
-// result is a lazy Try — one of the four List operators that cross back
-// to lazy (see the List type).
+// result is a lazy Try — one of the List operators that cross back to
+// lazy (see the List type).
 func (l List[T]) MapErr[U any](f func(T) (U, error)) Try[U] {
 	return FromSlice([]T(l)).MapErr(f)
 }
 
 // FilterErr mirrors Seq.FilterErr. The list is consumed eagerly, but the
-// result is a lazy Try — one of the four List operators that cross back
-// to lazy (see the List type).
+// result is a lazy Try — one of the List operators that cross back to
+// lazy (see the List type).
 func (l List[T]) FilterErr(pred func(T) (bool, error)) Try[T] {
 	return FromSlice([]T(l)).FilterErr(pred)
 }
@@ -204,6 +209,16 @@ func (l List[T]) SortedByDesc[K cmp.Ordered](sel func(T) K) List[T] {
 // JoinBy mirrors Seq.JoinBy eagerly.
 func (l List[T]) JoinBy[U any, K comparable, R any](other Seq[U], leftKey func(T) K, rightKey func(U) K, combine func(T, U) R) List[R] {
 	return List[R](FromSlice([]T(l)).JoinBy(other, leftKey, rightKey, combine).Collect())
+}
+
+// LeftJoinBy mirrors Seq.LeftJoinBy eagerly.
+func (l List[T]) LeftJoinBy[U any, K comparable, R any](other Seq[U], leftKey func(T) K, rightKey func(U) K, combine func(T, U, bool) R) List[R] {
+	return List[R](FromSlice([]T(l)).LeftJoinBy(other, leftKey, rightKey, combine).Collect())
+}
+
+// GroupJoinBy mirrors Seq.GroupJoinBy eagerly.
+func (l List[T]) GroupJoinBy[U any, K comparable, R any](other Seq[U], leftKey func(T) K, rightKey func(U) K, combine func(T, []U) R) List[R] {
+	return List[R](FromSlice([]T(l)).GroupJoinBy(other, leftKey, rightKey, combine).Collect())
 }
 
 // Collect mirrors Seq.Collect eagerly, implemented directly over the
@@ -354,6 +369,13 @@ func (l List[T]) Reduce(f func(T, T) T) (T, bool) {
 	return FromSlice([]T(l)).Reduce(f)
 }
 
+// FoldedBy mirrors Seq.FoldedBy. The list is consumed eagerly, but the
+// result is a lazy Seq2 — one of the List operators that cross back to
+// lazy (see the List type).
+func (l List[T]) FoldedBy[K comparable, A any](key func(T) K, init func(K) A, f func(A, T) A) Seq2[K, A] {
+	return FromSlice([]T(l)).FoldedBy(key, init, f)
+}
+
 // GroupBy mirrors Seq.GroupBy eagerly.
 func (l List[T]) GroupBy[K comparable](sel func(T) K) map[K][]T {
 	return FromSlice([]T(l)).GroupBy(sel)
@@ -464,6 +486,7 @@ var generatedListMethods = []string{
 	"SortedWith",
 	"DistinctWith",
 	"Reversed",
+	"MergeSortedWith",
 	"Map",
 	"MapIndexed",
 	"FilterMap",
@@ -479,6 +502,8 @@ var generatedListMethods = []string{
 	"SortedBy",
 	"SortedByDesc",
 	"JoinBy",
+	"LeftJoinBy",
+	"GroupJoinBy",
 	"Collect",
 	"ToList",
 	"ForEach",
@@ -505,6 +530,7 @@ var generatedListMethods = []string{
 	"FoldErr",
 	"FoldBy",
 	"Reduce",
+	"FoldedBy",
 	"GroupBy",
 	"IndexBy",
 	"TallyBy",

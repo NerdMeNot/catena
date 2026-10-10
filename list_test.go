@@ -109,6 +109,48 @@ var c15Cases = map[string]c15Case{
 			return s.JoinBy(Of(0, 1, 2), func(v int) int { return ((v % 3) + 3) % 3 }, Self[int], func(v, u int) int { return v*10 + u }).Collect()
 		},
 	},
+	"LeftJoinBy": {
+		func(l List[int]) any {
+			return ints(l.LeftJoinBy(Of(0, 1), func(v int) int { return ((v % 3) + 3) % 3 }, Self[int], func(v, u int, ok bool) int {
+				if !ok {
+					return -v
+				}
+				return v*10 + u
+			}))
+		},
+		func(s Seq[int]) any {
+			return s.LeftJoinBy(Of(0, 1), func(v int) int { return ((v % 3) + 3) % 3 }, Self[int], func(v, u int, ok bool) int {
+				if !ok {
+					return -v
+				}
+				return v*10 + u
+			}).Collect()
+		},
+	},
+	"GroupJoinBy": {
+		func(l List[int]) any {
+			return ints(l.GroupJoinBy(Of(0, 1, 1), func(v int) int { return ((v % 3) + 3) % 3 }, Self[int], func(v int, us []int) int { return v*10 + len(us) }))
+		},
+		func(s Seq[int]) any {
+			return s.GroupJoinBy(Of(0, 1, 1), func(v int) int { return ((v % 3) + 3) % 3 }, Self[int], func(v int, us []int) int { return v*10 + len(us) }).Collect()
+		},
+	},
+	"MergeSortedWith": {
+		func(l List[int]) any { return ints(l.MergeSortedWith(func(a, b int) int { return a - b }, Of(2, 6))) },
+		func(s Seq[int]) any {
+			return s.MergeSortedWith(func(a, b int) int { return a - b }, Of(2, 6)).Collect()
+		},
+	},
+	"FoldedBy": {
+		func(l List[int]) any {
+			ks, vs := Unzip(l.FoldedBy(evenL, func(bool) int { return 0 }, func(a, v int) int { return a + v }))
+			return lpair{ks, vs}
+		},
+		func(s Seq[int]) any {
+			ks, vs := Unzip(s.FoldedBy(evenL, func(bool) int { return 0 }, func(a, v int) int { return a + v }))
+			return lpair{ks, vs}
+		},
+	},
 	"Collect": {func(l List[int]) any { return l.Collect() }, func(s Seq[int]) any { return s.Collect() }},
 	"ToList":  {func(l List[int]) any { return l.ToList() }, func(s Seq[int]) any { return s.ToList() }},
 	"ForEach": {

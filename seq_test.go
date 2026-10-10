@@ -312,3 +312,77 @@ func TestSeqEarlyBreaks(t *testing.T) {
 		}
 	})
 }
+
+// modelMerge is a two-way merge in which a wins ties, written as the
+// textbook loop so it agrees with the operator on unsorted input too.
+func modelMerge(a, b []int) []int {
+	var out []int
+	i, j := 0, 0
+	for i < len(a) || j < len(b) {
+		if j == len(b) || (i < len(a) && a[i] <= b[j]) {
+			out = append(out, a[i])
+			i++
+		} else {
+			out = append(out, b[j])
+			j++
+		}
+	}
+	return out
+}
+
+var mergeOther = []int{-3, 4, 4, 50}
+
+func init() {
+	registerSeqOps([]seqOp{
+		{
+			name:   "Then",
+			covers: []string{"Then"},
+			op: func(s catena.Seq[int]) catena.Seq[int] {
+				return s.Then(func(s catena.Seq[int]) catena.Seq[int] { return s.Filter(even) })
+			},
+			model: func(in []int) []int { return modelFilter(in, even) },
+		},
+		{
+			name:   "MergeSortedWith",
+			covers: []string{"MergeSortedWith"},
+			op: func(s catena.Seq[int]) catena.Seq[int] {
+				return s.MergeSortedWith(func(a, b int) int { return a - b }, catena.FromSlice(mergeOther))
+			},
+			model: func(in []int) []int { return modelMerge(in, mergeOther) },
+			panicOp: func(s catena.Seq[int]) catena.Seq[int] {
+				return s.MergeSortedWith(func(int, int) int { panic("callback boom") }, catena.Of(1))
+			},
+			alloc: allocBounded,
+		},
+	}...)
+}
+
+func TestThenInfersPackageFunctions(t *testing.T) {
+	// The point of Then: one-argument package functions chain without
+	// naming a type, whether they continue the chain or end it.
+	s := catena.Of(3, 1, 3, 2)
+	if got := s.Then(catena.Distinct).Then(catena.Sorted).Take(2).Collect(); !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("chained = %v", got)
+	}
+	if got := s.Then(catena.Sum); got != 9 {
+		t.Fatalf("terminal = %d", got)
+	}
+}
+
+func TestMergeSortedWithCleansUpEveryInput(t *testing.T) {
+	// Every input is pulled, so every input's cleanup must run on an
+	// early stop — including inputs that were never the minimum.
+	var starts, cleanups [3]int
+	in := func(i int) catena.Seq[int] {
+		return tracked(5, &starts[i], &cleanups[i]).Map(func(v int) int { return v + i*100 })
+	}
+	got := in(0).MergeSortedWith(func(a, b int) int { return a - b }, in(1), in(2)).Take(2).Collect()
+	if len(got) != 2 {
+		t.Fatalf("got %v", got)
+	}
+	for i := range starts {
+		if starts[i] != 1 || cleanups[i] != 1 {
+			t.Fatalf("input %d: starts=%d cleanups=%d", i, starts[i], cleanups[i])
+		}
+	}
+}

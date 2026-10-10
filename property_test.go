@@ -259,3 +259,34 @@ func TestPropFoldByEqualsGroupByFold(t *testing.T) {
 		}
 	})
 }
+
+func TestPropMergeSortedIsSortedConcat(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		n := rapid.IntRange(0, 5).Draw(t, "inputs")
+		var seqs []catena.Seq[int]
+		var all []int
+		for range n {
+			xs := genInts(t)
+			slices.Sort(xs)
+			all = append(all, xs...)
+			seqs = append(seqs, catena.FromSlice(xs))
+		}
+		slices.Sort(all)
+		if got := catena.MergeSorted(seqs...).Collect(); !slices.Equal(got, all) {
+			t.Fatalf("%v vs %v", got, all)
+		}
+	})
+}
+
+func TestPropFoldedByAgreesWithFoldBy(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		xs := genInts(t)
+		key := func(v int) int { return v % 4 }
+		zero := func(int) int { return 0 }
+		add := func(a, v int) int { return a + v }
+		lazy := catena.CollectMap(catena.FromSlice(xs).FoldedBy(key, zero, add))
+		if eager := catena.FromSlice(xs).FoldBy(key, zero, add); !maps.Equal(lazy, eager) {
+			t.Fatalf("%v vs %v", lazy, eager)
+		}
+	})
+}
