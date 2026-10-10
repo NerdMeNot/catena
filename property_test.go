@@ -262,24 +262,6 @@ func TestPropFoldByEqualsGroupByFold(t *testing.T) {
 	})
 }
 
-func TestPropMergeSortedIsSortedConcat(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		n := rapid.IntRange(0, 5).Draw(t, "inputs")
-		var seqs []catena.Seq[int]
-		var all []int
-		for range n {
-			xs := genInts(t)
-			slices.Sort(xs)
-			all = append(all, xs...)
-			seqs = append(seqs, catena.FromSlice(xs))
-		}
-		slices.Sort(all)
-		if got := catena.MergeSorted(seqs...).Collect(); !slices.Equal(got, all) {
-			t.Fatalf("%v vs %v", got, all)
-		}
-	})
-}
-
 func TestPropFoldedByAgreesWithFoldBy(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		xs := genInts(t)

@@ -42,7 +42,6 @@ a warning.
 | `DistinctWith` | [S] ⚠ mem distinct; O(n²) compares — small inputs |
 | `Reversed` | ⚠ mem all, ⚠∞ |
 | `Once` | panics on second consumption — a development guard |
-| `MergeSortedWith(cmp, others...)` | lazy merge of already-sorted inputs; holds one element of each of `others`, which are consumed via `iter.Pull` — put the longest input first |
 | `Then(f)` | returns `f(s)` — chains package functions and `par` stages |
 | `UntilDone(ctx)` | → `Try`; yields ctx.Err() and stops on cancellation |
 
@@ -125,7 +124,6 @@ of `T`.
 |---|---|
 | `Distinct`, `Dedupe` | [S]; first wins / consecutive only |
 | `Sorted`, `SortedDesc` | ⚠ mem all, ⚠∞; stable |
-| `MergeSorted(seqs...)` | lazy merge of already-sorted inputs; equal elements keep argument order |
 | `Sum`, `Product`, `Average`, `Max`, `Min`, `MinMax`, `TopN`, `BottomN` | ⚠∞ |
 | `Contains`, `IndexOf` | ◐ |
 | `NonZero` | drops zero values |

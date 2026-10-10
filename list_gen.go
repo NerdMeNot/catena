@@ -107,11 +107,6 @@ func (l List[T]) Reversed() List[T] {
 	return List[T](out)
 }
 
-// MergeSortedWith mirrors Seq.MergeSortedWith eagerly.
-func (l List[T]) MergeSortedWith(cmp func(a, b T) int, others ...Seq[T]) List[T] {
-	return List[T](FromSlice([]T(l)).MergeSortedWith(cmp, others...).Collect())
-}
-
 // Map mirrors Seq.Map eagerly, implemented directly over the
 // backing slice rather than through the lazy pipeline.
 func (l List[T]) Map[U any](f func(T) U) List[U] {
@@ -486,7 +481,6 @@ var generatedListMethods = []string{
 	"SortedWith",
 	"DistinctWith",
 	"Reversed",
-	"MergeSortedWith",
 	"Map",
 	"MapIndexed",
 	"FilterMap",

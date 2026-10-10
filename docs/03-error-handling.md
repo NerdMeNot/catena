@@ -43,7 +43,7 @@ first half, rule 5 is the second; rule 4 is a producer convention.
 ## `Try` is deliberately small
 
 `Try` carries 13 intermediates, three policy exits back to `Seq` (`Ignore`,
-`Errs`, `Must`) and the collecting terminals — against the 41 chainable
+`Errs`, `Must`) and the collecting terminals — against the 40 chainable
 operators `Seq` has. That is the design, not an omission: the
 moment data can fail, you should pick an error policy early and get the
 full API back. The intended shape is to stay in `Try` only while errors are

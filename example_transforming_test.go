@@ -216,25 +216,6 @@ func ExampleSeq_GroupJoinBy() {
 	// Output: [ada:2 bob:0]
 }
 
-func ExampleMergeSorted() {
-	// Inputs that are each already sorted merge lazily, holding one
-	// element per input — no buffer, so it works on unbounded streams.
-	odds := catena.Generate(1, func(n int) int { return n + 2 })
-	evens := catena.Generate(0, func(n int) int { return n + 2 })
-	fmt.Println(catena.MergeSorted(odds, evens).Take(6).Collect())
-	// Output: [0 1 2 3 4 5]
-}
-
-func ExampleSeq_MergeSortedWith() {
-	// The comparator form, for any element type. Equal elements keep
-	// input order, the receiver first.
-	byLen := func(a, b string) int { return len(a) - len(b) }
-	a := catena.Of("go", "rust", "kotlin")
-	b := catena.Of("c", "java")
-	fmt.Println(a.MergeSortedWith(byLen, b).Collect())
-	// Output: [c go rust java kotlin]
-}
-
 func ExampleSeq_Then() {
 	// Package functions sit inside the chain instead of wrapping it; a
 	// function taking more than the sequence goes in a closure.

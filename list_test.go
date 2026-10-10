@@ -135,12 +135,6 @@ var c15Cases = map[string]c15Case{
 			return s.GroupJoinBy(Of(0, 1, 1), func(v int) int { return ((v % 3) + 3) % 3 }, Self[int], func(v int, us []int) int { return v*10 + len(us) }).Collect()
 		},
 	},
-	"MergeSortedWith": {
-		func(l List[int]) any { return ints(l.MergeSortedWith(func(a, b int) int { return a - b }, Of(2, 6))) },
-		func(s Seq[int]) any {
-			return s.MergeSortedWith(func(a, b int) int { return a - b }, Of(2, 6)).Collect()
-		},
-	},
 	"FoldedBy": {
 		func(l List[int]) any {
 			ks, vs := Unzip(l.FoldedBy(evenL, func(bool) int { return 0 }, func(a, v int) int { return a + v }))

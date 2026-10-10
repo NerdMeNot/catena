@@ -258,47 +258,6 @@ fmt.Println(customers.GroupJoinBy(orders,
 [ada:2 bob:0]
 ```
 
-## MergeSorted
-
-```go
-func MergeSorted[T cmp.Ordered](seqs ...Seq[T]) Seq[T]
-```
-
-MergeSorted merges already-sorted sequences into one sorted sequence; equal elements keep argument order. Lazy, holding one element of each input after the first. Every input but the first is consumed through iter.Pull, at a coroutine switch per element, so put the longest first: see Seq.MergeSortedWith, which this is for an ordered T.
-
-```go
-// Inputs that are each already sorted merge lazily, holding one
-// element per input — no buffer, so it works on unbounded streams.
-odds := catena.Generate(1, func(n int) int { return n + 2 })
-evens := catena.Generate(0, func(n int) int { return n + 2 })
-fmt.Println(catena.MergeSorted(odds, evens).Take(6).Collect())
-```
-
-```
-[0 1 2 3 4 5]
-```
-
-## MergeSortedWith
-
-```go
-func (s Seq[T]) MergeSortedWith(cmp func(a, b T) int, others ...Seq[T]) Seq[T]
-```
-
-MergeSortedWith merges s with others into one sequence ordered by cmp, given that every input is already ordered by cmp; on unsorted input the output is simply not sorted. Equal elements keep input order, the receiver first. Lazy: it holds one element of each of others, and consumes each of them at most one element past what it has yielded. The receiver is consumed directly; each of others is consumed through iter.Pull (its cleanup always runs), which costs a coroutine switch per element — tens of nanoseconds — so put the longest input first. catena.MergeSorted is the no-comparator form, for an ordered T.
-
-```go
-// The comparator form, for any element type. Equal elements keep
-// input order, the receiver first.
-byLen := func(a, b string) int { return len(a) - len(b) }
-a := catena.Of("go", "rust", "kotlin")
-b := catena.Of("c", "java")
-fmt.Println(a.MergeSortedWith(byLen, b).Collect())
-```
-
-```
-[c go rust java kotlin]
-```
-
 ## Then
 
 ```go

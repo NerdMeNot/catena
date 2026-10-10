@@ -34,8 +34,7 @@ func Buffer[T any](n int) func(catena.Seq[T]) catena.Seq[T] {
 // Merge yields the elements of every sequence as they arrive, each
 // sequence running on a goroutine of its own. Elements of one sequence
 // keep their order; the interleaving between sequences is whatever the
-// timing makes it. It ends when all have ended. catena.MergeSorted is the
-// unrelated sequential merge of sorted inputs. ⚠ Starts one goroutine per
+// timing makes it. It ends when all have ended. ⚠ Starts one goroutine per
 // sequence, plus one, per iteration, all joined before it returns, so
 // stopping waits for every source's current step. ⚠ The sources run
 // concurrently with each other and with the consumer's loop body. Each

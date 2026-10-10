@@ -35,11 +35,6 @@ before — but it is no longer someone else's problem.
 - **Joins that drop nothing.** `Seq.LeftJoinBy` keeps a left element with
   no match and tells `combine` so; `Seq.GroupJoinBy` yields one result per
   left element with all of its matches together.
-- **`catena.MergeSorted` and `Seq.MergeSortedWith`** merge inputs that are
-  each already sorted, lazily, holding one element per input — so they
-  work on unbounded streams, where `Chain` followed by `Sorted` cannot.
-  Every input after the first costs a coroutine switch per element, as
-  `Zip` does; the performance guide has the number.
 - **`catena/par`: concurrency.** Six operators, each a stage for `Then`:
   - `Map`, `MapUnordered` and `ForEach` run a callback up to `n` at a
     time. The source stays on the consumer's goroutine; only the callback
