@@ -120,27 +120,36 @@ jobs:
           ref: ${{ env.PUBLISH_REF || github.sha }}
           fetch-depth: 0
 
-      # The invariant the whole tag-only rule exists to protect: the
-      # operator reference is generated from the library's own doc comments
-      # and verified examples, so if it differs from the released tag, this
-      # build would document API that `go get` cannot deliver. Publishing a
-      # tag satisfies it trivially; publishing a branch satisfies it only
-      # while the library is untouched, which is exactly when a site-only
-      # change is safe to ship ahead of a release.
-      - name: The operator reference matches the released module
+      # The invariant the whole tag-only rule exists to protect: the site
+      # must not describe API that `go get` cannot deliver. Publishing a
+      # tag satisfies it trivially. Publishing a branch satisfies it while
+      # the library's source is what was released — and that is what this
+      # compares: every non-test Go file of the library and the linter.
+      #
+      # It used to compare the generated operator reference instead. That
+      # is derived from the same source, but also from the examples, so
+      # rewriting an example — which changes no API — was refused as though
+      # it had. Tests, examples, guides and the site's own code can all
+      # move ahead of a release; the things they describe cannot.
+      #
+      # version.go is excluded because main carries the next -dev version
+      # by design; the example programs and the generators are not API.
+      - name: The library source matches the released module
         if: env.PUBLISH_REF != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
           git fetch --quiet --no-tags origin "refs/tags/$latest:refs/tags/$latest" 2>/dev/null || true
-          if git diff --quiet "$latest" HEAD -- docs/operators; then
-            echo "::notice::operator reference matches $latest"
+          api=(':(glob)**/*.go' ':(exclude,glob)**/*_test.go' ':(exclude)version.go'
+               ':(exclude)examples' ':(exclude)internal' ':(exclude)lint/testdata')
+          if git diff --quiet "$latest" HEAD -- "${api[@]}"; then
+            echo "::notice::library source matches $latest"
           else
-            echo "::error::the operator reference differs from $latest, so this build" \
-                 "would document API the released module does not have. Cut a release" \
+            echo "::error::the library's source differs from $latest, so this build" \
+                 "could document API the released module does not have. Cut a release" \
                  "instead of publishing this ref."
-            git diff --stat "$latest" HEAD -- docs/operators
+            git diff --stat "$latest" HEAD -- "${api[@]}"
             exit 1
           fi
         working-directory: .
