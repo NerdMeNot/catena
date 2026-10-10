@@ -1,0 +1,27 @@
+package dedupe
+
+import "github.com/NerdMeNot/catena"
+
+func flagged(xs catena.Seq[string]) {
+	_ = catena.Dedupe(catena.Sorted(xs))              // want `Distinct on sorted input keeps a set of every value seen: Dedupe yields the same elements in constant memory`
+	_ = catena.Dedupe(catena.SortedDesc(xs))          // want `Dedupe yields`
+	_ = xs.Then(catena.Sorted).Then(catena.Dedupe)    // want `Dedupe yields`
+	_ = catena.Dedupe(xs.Then(catena.Sorted))         // want `Dedupe yields`
+	_ = catena.Dedupe[string](catena.Sorted(xs))      // want `Dedupe yields`
+	_ = catena.Sorted(xs).Then(catena.Dedupe).Take(3) // want `Dedupe yields`
+}
+
+func fine(xs catena.Seq[string]) {
+	_ = catena.Distinct(xs)
+	_ = catena.Sorted(catena.Distinct(xs))
+	// No longer sorted by the compared value once it has been mapped.
+	_ = catena.Distinct(catena.Sorted(xs).Map(func(s string) string { return s[:1] }))
+	_ = catena.Dedupe(catena.Sorted(xs))
+	_ = catena.Distinct(catena.Of("b", "a"))
+	_ = catena.Chain(xs, xs)
+	_ = catena.Distinct(xs.Then(local))
+	_ = catena.CollectMap[int, string](xs.WithIndex())
+	_ = xs.Then(func(s catena.Seq[string]) catena.Seq[string] { return s })
+}
+
+func local(xs catena.Seq[string]) catena.Seq[string] { return xs }

@@ -1,0 +1,7 @@
+package topn
+
+import c "github.com/NerdMeNot/catena"
+
+func renamed(xs c.Seq[int]) {
+	_ = c.TopN(xs, 3) // want `TopN keeps`
+}
