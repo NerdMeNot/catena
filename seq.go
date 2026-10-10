@@ -14,6 +14,7 @@ package catena
 
 import (
 	"context"
+	"iter"
 	"slices"
 )
 
@@ -315,6 +316,72 @@ func (s Seq[T]) Reversed() Seq[T] {
 			}
 		}
 	}
+}
+
+// MergeSortedWith merges s with others into one sequence ordered by cmp,
+// given that every input is already ordered by cmp; on unsorted input the
+// output is simply not sorted. Equal elements keep input order, the
+// receiver first. Lazy: it holds one element per input and consumes each
+// input at most one element past what it has yielded, at a cost of one
+// comparison per input per element. Every input is consumed through
+// iter.Pull (its cleanup always runs). catena.MergeSorted is the
+// no-comparator form, for an ordered T.
+func (s Seq[T]) MergeSortedWith(cmp func(a, b T) int, others ...Seq[T]) Seq[T] {
+	return mergeSorted(cmp, append([]Seq[T]{s}, others...))
+}
+
+// mergeSorted is the shared k-way merge behind MergeSortedWith and
+// MergeSorted.
+func mergeSorted[T any](cmp func(a, b T) int, seqs []Seq[T]) Seq[T] {
+	return func(yield func(T) bool) {
+		type head struct {
+			v    T
+			next func() (T, bool)
+		}
+		heads := make([]head, 0, len(seqs))
+		stops := make([]func(), 0, len(seqs))
+		defer func() {
+			for _, stop := range stops {
+				stop()
+			}
+		}()
+		for _, in := range seqs {
+			next, stop := iter.Pull(src(in))
+			stops = append(stops, stop)
+			if v, ok := next(); ok {
+				heads = append(heads, head{v, next})
+			}
+		}
+		for len(heads) > 0 {
+			// Strictly-less keeps the earliest input on ties, and
+			// deleting in place keeps heads in input order.
+			m := 0
+			for i := 1; i < len(heads); i++ {
+				if cmp(heads[i].v, heads[m].v) < 0 {
+					m = i
+				}
+			}
+			if !yield(heads[m].v) {
+				return
+			}
+			if v, ok := heads[m].next(); ok {
+				heads[m].v = v
+			} else {
+				heads = slices.Delete(heads, m, m+1)
+			}
+		}
+	}
+}
+
+// Then returns f(s): it lets a function that takes a sequence sit inside a
+// chain instead of wrapping it. That is every package function of one
+// argument — s.Then(catena.Distinct).Then(catena.Sorted), or
+// s.Then(catena.Sum) to finish — and every stage built by the par package.
+// A function needing more arguments goes in a closure.
+//
+//catena:seq-only
+func (s Seq[T]) Then[U any](f func(Seq[T]) U) U {
+	return f(s)
 }
 
 // Once returns a sequence that panics if iterated more than once — a

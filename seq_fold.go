@@ -92,6 +92,39 @@ func (s Seq[T]) Reduce(f func(T, T) T) (T, bool) {
 	return acc, have
 }
 
+// FoldedBy is FoldBy that stays in the chain: it folds each element into a
+// per-key accumulator, then yields each key with its accumulator in the
+// order the keys were first seen. init is called once per distinct key.
+// Memory is bounded by the number of distinct keys, not elements.
+// catena.GroupedBy is the same shape with every element kept. ⚠ Fully
+// drains the source before the first emission — hangs on infinite input.
+func (s Seq[T]) FoldedBy[K comparable, A any](
+	key func(T) K, init func(K) A, f func(A, T) A,
+) Seq2[K, A] {
+	return func(yield func(K, A) bool) {
+		index := make(map[K]int)
+		var keys []K
+		var accs []A
+		src(s)(func(v T) bool {
+			k := key(v)
+			i, ok := index[k]
+			if !ok {
+				i = len(keys)
+				index[k] = i
+				keys = append(keys, k)
+				accs = append(accs, init(k))
+			}
+			accs[i] = f(accs[i], v)
+			return true
+		})
+		for i, k := range keys {
+			if !yield(k, accs[i]) {
+				return
+			}
+		}
+	}
+}
+
 // GroupBy collects elements into per-key buckets, each in encounter order.
 // ⚠ Full drain; retains every element; map iteration order is undefined.
 func (s Seq[T]) GroupBy[K comparable](sel func(T) K) map[K][]T {

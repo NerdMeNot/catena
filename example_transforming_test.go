@@ -167,6 +167,86 @@ func ExampleSeq_JoinBy() {
 	// Output: [ada:30 bob:10]
 }
 
+func ExampleSeq_LeftJoinBy() {
+	// A left outer join: the order with no customer is kept, and combine
+	// is told so.
+	type order struct {
+		Customer int
+		Amount   int
+	}
+	type customer struct {
+		ID   int
+		Name string
+	}
+	orders := catena.Of(order{1, 30}, order{9, 99})
+	customers := catena.Of(customer{1, "ada"})
+
+	fmt.Println(orders.LeftJoinBy(customers,
+		func(o order) int { return o.Customer },
+		func(c customer) int { return c.ID },
+		func(o order, c customer, ok bool) string {
+			if !ok {
+				return fmt.Sprintf("?:%d", o.Amount)
+			}
+			return fmt.Sprintf("%s:%d", c.Name, o.Amount)
+		},
+	).Collect())
+	// Output: [ada:30 ?:99]
+}
+
+func ExampleSeq_GroupJoinBy() {
+	// One row per customer with all of their orders together — where
+	// JoinBy would repeat the customer once per order.
+	type order struct {
+		Customer int
+		Amount   int
+	}
+	type customer struct {
+		ID   int
+		Name string
+	}
+	customers := catena.Of(customer{1, "ada"}, customer{2, "bob"})
+	orders := catena.Of(order{1, 30}, order{1, 12}, order{9, 99})
+
+	fmt.Println(customers.GroupJoinBy(orders,
+		func(c customer) int { return c.ID },
+		func(o order) int { return o.Customer },
+		func(c customer, os []order) string { return fmt.Sprintf("%s:%d", c.Name, len(os)) },
+	).Collect())
+	// Output: [ada:2 bob:0]
+}
+
+func ExampleMergeSorted() {
+	// Inputs that are each already sorted merge lazily, holding one
+	// element per input — no buffer, so it works on unbounded streams.
+	odds := catena.Generate(1, func(n int) int { return n + 2 })
+	evens := catena.Generate(0, func(n int) int { return n + 2 })
+	fmt.Println(catena.MergeSorted(odds, evens).Take(6).Collect())
+	// Output: [0 1 2 3 4 5]
+}
+
+func ExampleSeq_MergeSortedWith() {
+	// The comparator form, for any element type. Equal elements keep
+	// input order, the receiver first.
+	byLen := func(a, b string) int { return len(a) - len(b) }
+	a := catena.Of("go", "rust", "kotlin")
+	b := catena.Of("c", "java")
+	fmt.Println(a.MergeSortedWith(byLen, b).Collect())
+	// Output: [c go rust java kotlin]
+}
+
+func ExampleSeq_Then() {
+	// Package functions sit inside the chain instead of wrapping it; a
+	// function taking more than the sequence goes in a closure.
+	words := catena.Of("b", "a", "b", "c", "a")
+	fmt.Println(words.
+		Then(catena.Distinct).
+		Then(catena.Sorted).
+		Then(func(s catena.Seq[string]) catena.Seq[[]string] { return catena.Chunked(s, 2) }).
+		Collect())
+	// Output: [[a b] [c]]
+}
+
 func ExampleUnion() {
 	// Set semantics: the result is deduplicated, in encounter order,
 	// left operand first.

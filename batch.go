@@ -98,3 +98,16 @@ func Windowed[T any](s Seq[T], size, step int) Seq[[]T] {
 		})
 	}
 }
+
+// GroupedBy is GroupBy that stays in the chain: it yields each key with
+// its bucket, keys in the order they were first seen and each bucket in
+// encounter order. Every bucket is a fresh slice. Seq.FoldedBy is the
+// form that keeps an accumulator per key instead of every element. ⚠ Fully
+// drains the source before the first emission and retains every element —
+// hangs on infinite input. A package function for the same instantiation-
+// cycle reason as Chunked: Seq2[K, []T] leads back to Seq[[]T].
+func GroupedBy[T any, K comparable](s Seq[T], sel func(T) K) Seq2[K, []T] {
+	return s.FoldedBy(sel,
+		func(K) []T { return nil },
+		func(bucket []T, v T) []T { return append(bucket, v) })
+}
