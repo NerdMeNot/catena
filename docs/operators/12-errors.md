@@ -11,15 +11,20 @@ func (t Try[T]) Map[U any](f func(T) U) Try[U]
 Map yields f applied to each successful element; errored elements pass through.
 
 ```go
-// The callback never sees an errored element; it passes through
-// untouched, so a failure is not silently mapped into a valid value.
-doubled := parseAges().Map(func(n int) int { return n * 2 })
-vals, errs := doubled.CollectAll()
-fmt.Println(vals, len(errs))
+// The callback only runs on rows that parsed. The bad row passes
+// through as its error, so a failure is never formatted into something
+// that looks like a valid receipt line.
+receipts := importedOrders().Map(func(o importedOrder) string {
+	return fmt.Sprintf("%s $%.2f", o.ID, float64(o.Cents)/100)
+})
+lines, errs := receipts.CollectAll()
+fmt.Println(lines)
+fmt.Println(errs)
 ```
 
 ```
-[72 82] 1
+[A-100 $25.00 A-102 $12.00 A-103 $8.00]
+[order A-101: bad amount "pending"]
 ```
 
 ## MapErr
@@ -31,19 +36,25 @@ func (t Try[T]) MapErr[U any](f func(T) (U, error)) Try[U]
 MapErr yields f applied to each successful element; a failed call yields (zero, err); errored elements pass through.
 
 ```go
-// A mapping that can itself fail. Errors from either stage flow on.
-tenths := parseAges().MapErr(func(n int) (int, error) {
-	if n > 40 {
-		return 0, errors.New("too old")
-	}
-	return n * 10, nil
-})
-vals, errs := tenths.CollectAll()
-fmt.Println(vals, len(errs))
+// Parse, then validate: two stages that can each fail. Errors from
+// either one flow on side by side, in input order.
+ports := catena.Of("8080", "https", "70000", "9090").MapErr(strconv.Atoi).
+	MapErr(func(port int) (int, error) {
+		if port > 65535 {
+			return 0, fmt.Errorf("port %d out of range", port)
+		}
+		return port, nil
+	})
+valid, errs := ports.CollectAll()
+fmt.Println(valid)
+fmt.Println(errs[0])
+fmt.Println(errs[1])
 ```
 
 ```
-[360] 2
+[8080 9090]
+strconv.Atoi: parsing "https": invalid syntax
+port 70000 out of range
 ```
 
 ## FlatMap
@@ -55,17 +66,26 @@ func (t Try[T]) FlatMap[U any](f func(T) Try[U]) Try[U]
 FlatMap yields every element of f(v) for each successful element v, in order; an errored input element passes through un-mapped.
 
 ```go
-// An errored input passes through un-mapped; inner errors flow in
-// order alongside the outer ones.
-pairs := parseAges().FlatMap(func(n int) catena.Try[int] {
-	return catena.Of(n, n+1).MapErr(func(v int) (int, error) { return v, nil })
-})
-vals, errs := pairs.CollectAll()
+// One fallible step fans out into more fallible steps: every upload
+// that opened is parsed value by value. The upload that failed to open
+// passes through as its one error, in order with the inner ones.
+uploads := map[string]string{"mon.csv": "12,7", "wed.csv": "3,n/a"}
+open := func(name string) (string, error) {
+	if body, ok := uploads[name]; ok {
+		return body, nil
+	}
+	return "", fmt.Errorf("open %s: no such file", name)
+}
+quantities := catena.Of("mon.csv", "tue.csv", "wed.csv").MapErr(open).
+	FlatMap(func(body string) catena.Try[int] {
+		return catena.FromSlice(strings.Split(body, ",")).MapErr(strconv.Atoi)
+	})
+vals, errs := quantities.CollectAll()
 fmt.Println(vals, len(errs))
 ```
 
 ```
-[36 37 41 42] 1
+[12 7 3] 2
 ```
 
 ## Filter
@@ -77,15 +97,18 @@ func (t Try[T]) Filter(pred func(T) bool) Try[T]
 Filter yields the successful elements pred admits; errored elements pass through unexamined.
 
 ```go
-// The predicate is not called on errored elements, and they are not
-// filtered out — dropping them would silently discard failures.
-old := parseAges().Filter(func(n int) bool { return n > 40 })
-vals, errs := old.CollectAll()
-fmt.Println(vals, len(errs))
+// Keep the orders worth reviewing by hand. The predicate is not called
+// on the row that failed, and that row is not filtered out — dropping
+// it would silently discard the failure.
+large := importedOrders().Filter(func(o importedOrder) bool { return o.Cents >= 1000 })
+orders, errs := large.CollectAll()
+fmt.Println(orders)
+fmt.Println(errs)
 ```
 
 ```
-[41] 1
+[{A-100 2500} {A-102 1200}]
+[order A-101: bad amount "pending"]
 ```
 
 ## FilterErr
@@ -97,18 +120,25 @@ func (t Try[T]) FilterErr(pred func(T) (bool, error)) Try[T]
 FilterErr yields the successful elements pred admits; a failed pred call yields (zero, err); errored elements pass through unexamined.
 
 ```go
-valid := parseAges().FilterErr(func(n int) (bool, error) {
-	if n < 0 {
-		return false, errors.New("negative")
+// A predicate that has to look something up can fail too. A failed
+// lookup takes the element's place as an error instead of being read
+// as "no" and quietly dropping the order.
+paid := map[string]bool{"A-100": true, "A-102": false}
+settled := importedOrders().FilterErr(func(o importedOrder) (bool, error) {
+	isPaid, found := paid[o.ID]
+	if !found {
+		return false, fmt.Errorf("order %s: no payment record", o.ID)
 	}
-	return n > 40, nil
+	return isPaid, nil
 })
-vals, errs := valid.CollectAll()
-fmt.Println(vals, len(errs))
+orders, errs := settled.CollectAll()
+fmt.Println(orders)
+fmt.Println(errs)
 ```
 
 ```
-[41] 1
+[{A-100 2500}]
+[order A-101: bad amount "pending" order A-103: no payment record]
 ```
 
 ## Take
@@ -120,15 +150,18 @@ func (t Try[T]) Take(n int) Try[T]
 Take yields at most the first n elements, errored or not (R2). Panics if n is negative.
 
 ```go
-// Counts elements, errored or not — so it consumes at most n. For
-// "n successes", use Ignore().Take(n).
-first, _ := parseAges().Take(2).CollectAll()
-successes := parseAges().Ignore().Take(2).Collect()
-fmt.Println(first, successes)
+// A preview of the first two rows is two rows, bad ones included —
+// Take counts elements, so it never reads past n looking for
+// successes. For "the first two that parsed", Ignore first.
+preview, errs := importedOrders().Take(2).CollectAll()
+firstTwoGood := importedOrders().Ignore().Take(2).Collect()
+fmt.Println(preview, errs)
+fmt.Println(firstTwoGood)
 ```
 
 ```
-[36] [36 41]
+[{A-100 2500}] [order A-101: bad amount "pending"]
+[{A-100 2500} {A-102 1200}]
 ```
 
 ## TakeWhile
@@ -140,14 +173,16 @@ func (t Try[T]) TakeWhile(pred func(T) bool) Try[T]
 TakeWhile yields elements until pred rejects a successful element; errored elements pass through and do not terminate (R3).
 
 ```go
-// An errored element passes through without ending the sequence;
-// only a successful element failing the predicate stops it.
-kept, errs := parseAges().TakeWhile(func(n int) bool { return n < 40 }).CollectAll()
-fmt.Println(kept, len(errs))
+// Latency samples up to the first slow one. The dropped sample "--"
+// passes through without ending the run; only a successful element
+// failing the predicate stops it.
+samples := catena.Of("12", "15", "--", "18", "950", "14").MapErr(strconv.Atoi)
+fast, errs := samples.TakeWhile(func(ms int) bool { return ms < 100 }).CollectAll()
+fmt.Println(fast, len(errs))
 ```
 
 ```
-[36] 1
+[12 15 18] 1
 ```
 
 ## Drop
@@ -159,12 +194,16 @@ func (t Try[T]) Drop(n int) Try[T]
 Drop skips the first n elements, errored or not (R2). Panics if n is negative.
 
 ```go
-rest, _ := parseAges().Drop(1).CollectAll()
-fmt.Println(rest)
+// Skipping a header row. The header fails to parse like any other bad
+// row, and Drop counts it all the same: it skips elements, errored or
+// not.
+column := catena.Of("qty", "12", "n/a", "7").MapErr(strconv.Atoi)
+quantities, errs := column.Drop(1).CollectAll()
+fmt.Println(quantities, errs)
 ```
 
 ```
-[41]
+[12 7] [strconv.Atoi: parsing "n/a": invalid syntax]
 ```
 
 ## OnEach
@@ -176,14 +215,17 @@ func (t Try[T]) OnEach(f func(T)) Try[T]
 OnEach calls f on every successful element and passes everything through.
 
 ```go
-// Runs only on successes; errors pass by untouched.
-seen := 0
-parseAges().OnEach(func(int) { seen++ }).CollectAll()
-fmt.Println(seen)
+// A tap for the rows that worked — here a running total for the import
+// summary — without ending the pipeline. Failed rows pass by untouched.
+importedCents := 0
+_, errs := importedOrders().
+	OnEach(func(o importedOrder) { importedCents += o.Cents }).
+	CollectAll()
+fmt.Println(importedCents, len(errs))
 ```
 
 ```
-2
+4500 1
 ```
 
 ## OnError
@@ -195,14 +237,19 @@ func (t Try[T]) OnError(f func(error)) Try[T]
 OnError calls f on every error and passes everything through — a logging hook.
 
 ```go
-// The logging tap, the mirror of OnEach.
-logged := 0
-parseAges().OnError(func(error) { logged++ }).CollectAll()
-fmt.Println(logged)
+// The logging tap, the mirror of OnEach: record each failure as it
+// goes by and still choose afterwards what failures mean. Here they
+// are logged, then skipped.
+orders := importedOrders().
+	OnError(func(err error) { fmt.Println("skipped:", err) }).
+	Ignore().
+	Collect()
+fmt.Println(len(orders), "orders imported")
 ```
 
 ```
-1
+skipped: order A-101: bad amount "pending"
+3 orders imported
 ```
 
 ## Recover
@@ -214,17 +261,26 @@ func (t Try[T]) Recover(f func(error) (T, bool)) Try[T]
 Recover offers each error to f: reporting true replaces the element with (v, nil); reporting false passes the error through unchanged.
 
 ```go
-// Repair chosen errors mid-stream: reporting true replaces the
-// element, false lets the error continue.
-fixed := parseAges().Recover(func(err error) (int, bool) {
-	return 0, strings.Contains(err.Error(), "unknown")
-})
-vals, errs := fixed.CollectAll()
-fmt.Println(vals, len(errs))
+// Fall back where a sensible default exists and let the rest through:
+// an unset timeout becomes 30s, a malformed one is still an error.
+// Reporting true replaces the element, false lets the error continue.
+errUnset := errors.New("not set")
+parse := func(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, errUnset
+	}
+	return time.ParseDuration(s)
+}
+timeouts := catena.Of("5s", "", "fast").MapErr(parse).
+	Recover(func(err error) (time.Duration, bool) {
+		return 30 * time.Second, errors.Is(err, errUnset)
+	})
+vals, errs := timeouts.CollectAll()
+fmt.Println(vals, errs)
 ```
 
 ```
-[36 0 41] 0
+[5s 30s] [time: invalid duration "fast"]
 ```
 
 ## WrapErr
@@ -236,17 +292,24 @@ func (t Try[T]) WrapErr(f func(error) error) Try[T]
 WrapErr replaces each error with f(err) — the place to add positional context. If f returns nil (a caller bug), the original error is kept: an error is never converted into a zero-value success.
 
 ```go
-// Add the context that only this stage has. Returning nil keeps the
-// original error rather than turning a failure into a zero value.
-wrapped := parseAges().WrapErr(func(err error) error {
-	return fmt.Errorf("parsing ages: %w", err)
-})
-_, err := wrapped.Collect()
-fmt.Println(strings.HasPrefix(err.Error(), "parsing ages:"))
+// The parser knows what went wrong; only this stage knows where. Add
+// that here. Returning nil keeps the original error rather than
+// turning a failure into a zero value.
+line := 0
+quantities := catena.Of("12", "n/a", "7").
+	MapErr(func(field string) (int, error) {
+		line++
+		return strconv.Atoi(field)
+	}).
+	WrapErr(func(err error) error {
+		return fmt.Errorf("stock.csv line %d: %w", line, err)
+	})
+_, err := quantities.Collect()
+fmt.Println(err)
 ```
 
 ```
-true
+stock.csv line 2: strconv.Atoi: parsing "n/a": invalid syntax
 ```
 
 ## UntilDone
@@ -258,14 +321,18 @@ func (t Try[T]) UntilDone(ctx context.Context) Try[T]
 UntilDone passes elements through until ctx is done, then yields (zero, ctx.Err()) and stops.
 
 ```go
+// Cancellation enters at the edge. Once ctx is done the sequence
+// yields ctx's error and stops, so a shutdown surfaces like any other
+// failure. Here the request is cancelled while the first order saves.
 ctx, cancel := context.WithCancel(context.Background())
-cancel()
-_, err := parseAges().UntilDone(ctx).Collect()
-fmt.Println(err)
+saved, err := importedOrders().UntilDone(ctx).
+	OnEach(func(importedOrder) { cancel() }).
+	Collect()
+fmt.Println(len(saved), err)
 ```
 
 ```
-context canceled
+1 context canceled
 ```
 
 ## Collect
@@ -277,13 +344,17 @@ func (t Try[T]) Collect() ([]T, error)
 Collect gathers successful elements until the first error, returning the partial slice and that error (R5); (all elements, nil) on a clean drain. Nil slice for empty.
 
 ```go
-// Abort: the values gathered before the failure, plus the error.
-vals, err := parseAges().Collect()
-fmt.Println(vals, err != nil)
+// The all-or-nothing policy: stop at the first bad value. You get the
+// error plus what was gathered before it — enough to say how far it
+// got, and "9090" is never parsed.
+ports, err := catena.Of("8080", "https", "9090").MapErr(strconv.Atoi).Collect()
+fmt.Println(ports)
+fmt.Println(err)
 ```
 
 ```
-[36] true
+[8080]
+strconv.Atoi: parsing "https": invalid syntax
 ```
 
 ## CollectAll
@@ -299,14 +370,18 @@ Full drain
 :::
 
 ```go
-// Gather: everything that worked and everything that did not, in one
-// pass. The two slices do not correspond positionally.
-vals, errs := parseAges().CollectAll()
-fmt.Println(vals, len(errs))
+// The import-report policy: everything that worked and everything that
+// did not, in one pass. The two slices do not correspond positionally.
+orders, errs := importedOrders().CollectAll()
+fmt.Printf("imported %d, rejected %d\n", len(orders), len(errs))
+for _, err := range errs {
+	fmt.Println("rejected:", err)
+}
 ```
 
 ```
-[36 41] 1
+imported 3, rejected 1
+rejected: order A-101: bad amount "pending"
 ```
 
 ## Ignore
@@ -318,12 +393,17 @@ func (t Try[T]) Ignore() Seq[T]
 Ignore yields the successful elements, dropping errored ones.
 
 ```go
-// Skip: drop the failures and carry on as a plain Seq.
-fmt.Println(parseAges().Ignore().Collect())
+// The log-scan policy: a malformed line is not worth stopping for.
+// Drop the failures and carry on as a plain Seq, with its full API.
+statuses := catena.Of("200", "503", "-", "404", "500").MapErr(strconv.Atoi)
+serverErrors := statuses.Ignore().
+	Filter(func(code int) bool { return code >= 500 }).
+	Collect()
+fmt.Println(serverErrors)
 ```
 
 ```
-[36 41]
+[503 500]
 ```
 
 ## Errs
@@ -335,13 +415,16 @@ func (t Try[T]) Errs() Seq[error]
 Errs yields the errors, dropping successful elements — the dual of Ignore. Ignore and Errs on the same single-pass Try is a double consume; use CollectAll.
 
 ```go
-// The dual of Ignore. Consuming both on one single-pass Try is a
-// double consume — use CollectAll instead.
-fmt.Println(parseAges().Errs().Count())
+// Only what went wrong: a validation pass that lists every bad value
+// and has no use for the good ones. It is the dual of Ignore; wanting
+// both from one single-pass Try is a double consume, so use CollectAll.
+flags := catena.Of("true", "yes", "false", "enabled").MapErr(strconv.ParseBool)
+flags.Errs().ForEach(func(err error) { fmt.Println(err) })
 ```
 
 ```
-1
+strconv.ParseBool: parsing "yes": invalid syntax
+strconv.ParseBool: parsing "enabled": invalid syntax
 ```
 
 ## UntilErr
@@ -354,14 +437,21 @@ UntilErr yields the successful elements up to the first error, then stops and st
 
 ```go
 // Stop at the first failure, but as a sequence: the chain goes on
-// with the full Seq API, and the error is checked once it has run.
+// with the full Seq API, and the error is checked once it has run —
+// the way bufio.Scanner's Err is read after the loop.
 var err error
-total := parseAges().UntilErr(&err).Then(catena.Sum)
-fmt.Println(total, err)
+revenue := importedOrders().UntilErr(&err).
+	Map(func(o importedOrder) int { return o.Cents }).
+	Then(catena.Sum)
+if err != nil {
+	fmt.Println("import stopped:", err)
+}
+fmt.Println("revenue so far:", revenue)
 ```
 
 ```
-36 strconv.Atoi: parsing "unknown": invalid syntax
+import stopped: order A-101: bad amount "pending"
+revenue so far: 2500
 ```
 
 ## Fold
@@ -373,13 +463,17 @@ func (t Try[T]) Fold[A any](init A, f func(A, T) A) (A, error)
 Fold reduces successful elements until the first error, returning the accumulator so far and that error (R5).
 
 ```go
-// Stops at the first error, returning the accumulator so far.
-sum, err := parseAges().Fold(0, func(acc, n int) int { return acc + n })
-fmt.Println(sum, err != nil)
+// A revenue total over rows that may not parse. It stops at the first
+// error and returns the accumulator so far alongside it, so a partial
+// total can never be mistaken for the whole.
+cents, err := importedOrders().Fold(0, func(sum int, o importedOrder) int {
+	return sum + o.Cents
+})
+fmt.Println(cents, err)
 ```
 
 ```
-36 true
+2500 order A-101: bad amount "pending"
 ```
 
 ## ForEach
@@ -391,17 +485,19 @@ func (t Try[T]) ForEach(f func(T) error) error
 ForEach calls f on each successful element, stopping at and returning the first of an element error or a non-nil f return (R5).
 
 ```go
-// Stops at the first of an element error or a callback error.
-err := parseAges().ForEach(func(n int) error {
-	fmt.Println("handled", n)
+// Do something fallible with each element — here, save it. Stops at
+// the first failure from either side: a bad element, or the callback
+// returning an error.
+err := importedOrders().ForEach(func(o importedOrder) error {
+	fmt.Println("saved", o.ID)
 	return nil
 })
-fmt.Println(err != nil)
+fmt.Println("stopped:", err)
 ```
 
 ```
-handled 36
-true
+saved A-100
+stopped: order A-101: bad amount "pending"
 ```
 
 ## Err
@@ -413,13 +509,16 @@ func (t Try[T]) Err() error
 Err consumes until the first error and returns it; nil on a clean drain (R5).
 
 ```go
-// Just the first error, if any — for pipelines run entirely for
-// their side effects.
-fmt.Println(parseAges().Err() != nil)
+// A pre-flight check: is every entry in the allowlist a valid address?
+// Only the first error matters, and the parsed values are not needed.
+allowlist := catena.Of("10.0.0.1", "10.0.0.256", "10.0.0.3").MapErr(netip.ParseAddr)
+if err := allowlist.Err(); err != nil {
+	fmt.Println("allowlist rejected:", err)
+}
 ```
 
 ```
-true
+allowlist rejected: ParseAddr("10.0.0.256"): IPv4 field has value >255
 ```
 
 ## Count
@@ -431,13 +530,17 @@ func (t Try[T]) Count() (int, error)
 Count counts successful elements up to the first error, which is returned alongside the count so far (R5).
 
 ```go
-// Successes counted up to the first error, which is returned with it.
-n, err := parseAges().Count()
-fmt.Println(n, err != nil)
+// Count is a terminal, so it stops at the first error: this is how
+// many rows were good before the import broke, not how many are good
+// in total. That would be Ignore().Count().
+n, err := importedOrders().Count()
+fmt.Println(n, err)
+fmt.Println(importedOrders().Ignore().Count())
 ```
 
 ```
-1 true
+1 order A-101: bad amount "pending"
+3
 ```
 
 ## Must
@@ -449,14 +552,16 @@ func (t Try[T]) Must() Seq[T]
 Must yields the successful elements and panics with the error value on the first error — recover() receives the error itself.
 
 ```go
-// For pipelines where a failure is a programming bug. The panic
-// value is the error itself, so recover() can inspect it.
+// For input you wrote yourself — a retry schedule compiled into the
+// binary — where a failure is a programming bug. The panic value is
+// the error itself, so recover() can inspect it.
 defer func() { fmt.Println("recovered:", recover()) }()
-parseAges().Must().Drain()
+backoff := catena.Of("1s", "5s", "30sec").MapErr(time.ParseDuration)
+fmt.Println(backoff.Must().Collect())
 ```
 
 ```
-recovered: strconv.Atoi: parsing "unknown": invalid syntax
+recovered: time: unknown unit "sec" in duration "30sec"
 ```
 
 ## Pull
@@ -468,14 +573,20 @@ func (t Try[T]) Pull() (next func() (T, error, bool), stop func())
 Pull converts t to a pull-based iterator. THE CALLER MUST CALL stop, even if next has returned false, or resources held by t will leak.
 
 ```go
-next, stop := parseAges().Pull()
+// When the consumer has to drive — one record at a time, between
+// other work. A failed element still arrives with ok true; ok is false
+// only at the end. Ownership transfers to you: always call stop.
+next, stop := importedOrders().Pull()
 defer stop()
-v, err, ok := next()
-fmt.Println(v, err, ok)
+order, err, ok := next()
+fmt.Println(order, err, ok)
+_, err, ok = next()
+fmt.Println(err, ok)
 ```
 
 ```
-36 <nil> true
+{A-100 2500} <nil> true
+order A-101: bad amount "pending" true
 ```
 
 ## Seq2
@@ -487,17 +598,20 @@ func (t Try[T]) Seq2() iter.Seq2[T, error]
 Seq2 converts to the stdlib iterator type. Free.
 
 ```go
-// A free conversion to the standard pair iterator.
-for v, err := range parseAges().Seq2() {
+// A free conversion to the standard pair iterator, for a plain range
+// loop that handles each failure its own way.
+ports := catena.Of("8080", "https", "9090").MapErr(strconv.Atoi)
+for port, err := range ports.Seq2() {
 	if err != nil {
-		fmt.Println("error at", v)
-		break
+		fmt.Println("skipping:", err)
+		continue
 	}
-	fmt.Println("ok", v)
+	fmt.Println("listening on", port)
 }
 ```
 
 ```
-ok 36
-error at 0
+listening on 8080
+skipping: strconv.Atoi: parsing "https": invalid syntax
+listening on 9090
 ```

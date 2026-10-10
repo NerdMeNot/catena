@@ -28,18 +28,27 @@ A finished result is delivered, and a done ctx is noticed, only when the source 
 :::
 
 ```go
-// Eight lookups at once, results in the order the names went in.
-lookup := func(_ context.Context, name string) (int, error) {
-	return len(name), nil
+// A product page needs four products, and each is a request. Eight at
+// a time, and they come back in the order they were asked for —
+// whichever response happened to arrive first.
+ctx := context.Background()
+ids := catena.Of(101, 102, 103, 104)
+
+products, err := ids.Then(parallel.Map(ctx, 8, getProduct)).Collect()
+if err != nil {
+	fmt.Println("page failed:", err)
+	return
 }
-lengths, err := catena.Of("ada", "grace", "linus").
-	Then(parallel.Map(context.Background(), 8, lookup)).
-	Collect()
-fmt.Println(lengths, err)
+for _, p := range products {
+	fmt.Printf("%d %-9s $%d\n", p.ID, p.Name, p.Price)
+}
 ```
 
 ```
-[3 5 5] <nil>
+101 keyboard  $89
+102 mouse     $35
+103 monitor   $329
+104 webcam    $59
 ```
 
 ## MapUnordered
@@ -63,20 +72,22 @@ A finished result is delivered only when the source next yields or ends
 :::
 
 ```go
-// Results arrive as their calls finish, so the order is not the
-// input's; sort when it matters.
-upper := func(_ context.Context, s string) (string, error) {
-	return strings.ToUpper(s), nil
-}
-got, _ := catena.Of("b", "c", "a").
-	Then(parallel.MapUnordered(context.Background(), 3, upper)).
-	Collect()
-slices.Sort(got)
-fmt.Println(got)
+// Ask three mirrors for the same file and take whichever answers
+// first. Results arrive as their calls finish, so First returns as
+// soon as one does — and stopping cancels the other two requests and
+// waits for them to end before First returns.
+ctx := context.Background()
+mirrors := catena.Of("eu-slow", "us-fast", "ap-slow")
+
+winner, ok := mirrors.
+	Then(parallel.MapUnordered(ctx, 3, download)).
+	Ignore().
+	First()
+fmt.Println(winner, ok)
 ```
 
 ```
-[A B C]
+2048 bytes from us-fast true
 ```
 
 ## ForEach
@@ -96,19 +107,25 @@ Full drain on success
 :::
 
 ```go
-// A concurrent loop that returns the first error, having cancelled
-// and waited for the rest.
-var total atomic.Int64
-add := func(_ context.Context, n int) error {
-	total.Add(int64(n))
+// A price changed: purge it from every edge cache, four nodes at a
+// time. ForEach returns the first error, having cancelled and waited
+// for the purges still running — or nil once every node has confirmed.
+ctx := context.Background()
+nodes := catena.Of("fra1", "iad2", "sin1", "syd1", "gru1", "nrt1")
+
+var confirmed atomic.Int64
+err := nodes.Then(parallel.ForEach(ctx, 4, func(ctx context.Context, node string) error {
+	if err := purgeCache(ctx, node); err != nil {
+		return fmt.Errorf("%s: %w", node, err)
+	}
+	confirmed.Add(1)
 	return nil
-}
-err := catena.Range(1, 101, 1).Then(parallel.ForEach(context.Background(), 8, add))
-fmt.Println(total.Load(), err)
+}))
+fmt.Println("purged on", confirmed.Load(), "nodes, err:", err)
 ```
 
 ```
-5050 <nil>
+purged on 6 nodes, err: <nil>
 ```
 
 ## Buffer
@@ -132,14 +149,20 @@ Everything upstream runs concurrently with the consumer's loop body
 :::
 
 ```go
-// The source runs up to 16 elements ahead, on its own goroutine, so
-// a slow producer and a slow consumer overlap. Order is unchanged.
-squares := catena.Range(1, 6, 1).Map(func(n int) int { return n * n })
-fmt.Println(squares.Then(parallel.Buffer[int](16)).Collect())
+// Exporting orders: reading them is slow and so is uploading them.
+// Behind a buffer the reader runs ahead on its own goroutine while
+// the upload is in flight, so the two waits overlap instead of
+// adding up. The order of the rows is unchanged.
+uploaded := 0
+for row := range exportedOrders().Then(parallel.Buffer[string](64)) {
+	upload(row)
+	uploaded++
+}
+fmt.Println(uploaded, "rows uploaded")
 ```
 
 ```
-[1 4 9 16 25]
+5 rows uploaded
 ```
 
 ## ChunkedWithin
@@ -163,16 +186,22 @@ Everything upstream runs concurrently with the consumer's loop body
 :::
 
 ```go
-// Batches of up to three, or whatever has arrived within a minute.
-// This source never pauses, so every chunk closes on size.
-batches := catena.Range(1, 8, 1).
-	Then(parallel.ChunkedWithin[int](3, time.Minute)).
-	Collect()
-fmt.Println(batches)
+// Click events arrive on a channel and go to the database in bulk:
+// up to three rows per INSERT, but never held back for more than
+// 50ms waiting for a batch to fill. Chunked alone would sit on the
+// last partial batch until more events came.
+ctx := context.Background()
+events := catena.FromChan(ctx, clicks())
+
+for batch := range events.Then(parallel.ChunkedWithin[string](3, 50*time.Millisecond)) {
+	fmt.Println("INSERT", len(batch), "rows:", batch)
+}
 ```
 
 ```
-[[1 2 3] [4 5 6] [7]]
+INSERT 3 rows: [home cart pay]
+INSERT 3 rows: [home search item]
+INSERT 1 rows: [cart]
 ```
 
 ## Merge
@@ -196,13 +225,17 @@ The sources run concurrently with each other and with the consumer's loop body
 :::
 
 ```go
-// Each sequence runs on its own goroutine; elements arrive as they
-// are produced, so only the order within one sequence is fixed.
-got := parallel.Merge(catena.Of(1, 2, 3), catena.Of(10, 20), catena.Of(100)).Collect()
-slices.Sort(got)
-fmt.Println(got)
+// One stream out of three services' logs, each read on its own
+// goroutine. Lines from one service stay in order; how the services
+// interleave is down to timing, so this counts rather than prints.
+logs := parallel.Merge(serviceLog("api"), serviceLog("worker"), serviceLog("db"))
+
+errors := logs.
+	Filter(func(line string) bool { return strings.Contains(line, "ERROR") }).
+	TallyBy(func(line string) string { return strings.Fields(line)[0] })
+fmt.Println("api:", errors["api"], "worker:", errors["worker"], "db:", errors["db"])
 ```
 
 ```
-[1 2 3 10 20 100]
+api: 2 worker: 0 db: 1
 ```

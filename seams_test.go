@@ -146,3 +146,45 @@ func TestThenOnNilAndAsATerminal(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+// invoice is a type with methods, for the test below.
+type invoice struct {
+	Region string
+	Amount int
+	Paid   bool
+}
+
+func (i invoice) IsPaid() bool     { return i.Paid }
+func (i invoice) Total() int       { return i.Amount }
+func (i invoice) InRegion() string { return i.Region }
+func (i invoice) Label() string    { return fmt.Sprintf("%s:%d", i.Region, i.Amount) }
+
+// A method expression — invoice.IsPaid — is a function of the receiver, so
+// it goes wherever a callback does. The guides lean on this to keep chains
+// free of one-line closures, so it is pinned here: every callback shape
+// the library takes must accept one.
+func TestMethodExpressionsAsCallbacks(t *testing.T) {
+	invoices := catena.Of(
+		invoice{"eu", 900, false}, invoice{"us", 1200, true},
+		invoice{"eu", 300, false}, invoice{"us", 50, false},
+	)
+	unpaid := invoices.FilterNot(invoice.IsPaid)
+
+	if got := unpaid.TopNBy(2, invoice.Total); len(got) != 2 || got[0].Amount != 900 || got[1].Amount != 300 {
+		t.Fatalf("TopNBy: %v", got)
+	}
+	if got := unpaid.Map(invoice.Label).Collect(); !slices.Equal(got, []string{"eu:900", "eu:300", "us:50"}) {
+		t.Fatalf("Map: %v", got)
+	}
+	if got := unpaid.SumOf(invoice.Total); got != 1250 {
+		t.Fatalf("SumOf: %d", got)
+	}
+	keys, totals := catena.Unzip(unpaid.FoldedBy(
+		invoice.InRegion,
+		func(string) int { return 0 },
+		func(sum int, i invoice) int { return sum + i.Amount },
+	))
+	if !slices.Equal(keys, []string{"eu", "us"}) || !slices.Equal(totals, []int{1200, 50}) {
+		t.Fatalf("FoldedBy: %v %v", keys, totals)
+	}
+}

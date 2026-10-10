@@ -5,23 +5,30 @@ sidebar:
   order: 9
 ---
 
-Concurrency: the parallel package runs slow callbacks several at a time without the pipeline changing shape. A stage goes into the chain with Then; a failed call is an element, so the consumer still picks the error policy; and every goroutine a stage starts has exited before the line that consumed it returns.
+Concurrency: a nightly job that turns a batch of orders into a shipping report, where every order needs two calls to other services. Sequentially that is slow in the dullest way — waiting. The parallel package runs the calls several at a time without the pipeline changing shape: a stage goes into the chain with Then, a failed call is an element so the consumer still picks the error policy, and every goroutine a stage starts has exited before the line that consumed it returns.  The services here are a real HTTP server on localhost with 40ms of latency per request, so the timings printed are real.
 
 Run it: `go run ./examples/09-concurrency`
 
 ```go
-// Concurrency: the parallel package runs slow callbacks several at a time
-// without the pipeline changing shape. A stage goes into the chain with
-// Then; a failed call is an element, so the consumer still picks the
-// error policy; and every goroutine a stage starts has exited before the
-// line that consumed it returns.
+// Concurrency: a nightly job that turns a batch of orders into a shipping
+// report, where every order needs two calls to other services. Sequentially
+// that is slow in the dullest way — waiting. The parallel package runs the
+// calls several at a time without the pipeline changing shape: a stage goes
+// into the chain with Then, a failed call is an element so the consumer
+// still picks the error policy, and every goroutine a stage starts has
+// exited before the line that consumed it returns.
+//
+// The services here are a real HTTP server on localhost with 40ms of
+// latency per request, so the timings printed are real.
 package main
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
-	"slices"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -29,100 +36,193 @@ import (
 	"github.com/NerdMeNot/catena/parallel"
 )
 
-type Page struct {
-	URL   string
-	Bytes int
+type Order struct {
+	ID       int
+	Customer string
+	SKU      string
 }
 
-// fetch stands in for a network call: 50ms of latency, and one URL that
-// always fails.
-func fetch(ctx context.Context, url string) (Page, error) {
-	select {
-	case <-time.After(50 * time.Millisecond):
-	case <-ctx.Done(): // a callback must honour its context
-		return Page{}, ctx.Err()
-	}
-	if url == "https://down.example" {
-		return Page{}, errors.New("connection refused: " + url)
-	}
-	return Page{url, 1000 + len(url)}, nil
+type Shipment struct {
+	Order   Order
+	Address string
+	InStock bool
 }
 
 func main() {
+	api := startServices()
+	defer api.Close()
 	ctx := context.Background()
-	urls := []string{
-		"https://a.example", "http://insecure.example", "https://b.example",
-		"https://c.example", "https://down.example", "https://d.example",
-		"https://e.example", "https://f.example", "https://g.example",
-	}
-	https := func(u string) bool { return len(u) > 5 && u[:5] == "https" }
 
-	// Eight fetches of 50ms each, four at a time: two rounds, not eight.
-	// Map yields in source order whatever order the calls finish in, and
-	// CollectAll keeps going past the failure and reports it.
+	orders := catena.Of(
+		Order{1001, "ada", "kbd-01"}, Order{1002, "bob", "mse-07"},
+		Order{1003, "ghost", "kbd-01"}, // no such customer
+		Order{1004, "cy", "mon-27"}, Order{1005, "ada", "cam-02"},
+		Order{1006, "dee", "kbd-01"}, Order{1007, "eve", "mse-07"},
+		Order{1008, "flo", "mon-27"},
+	)
+
+	// prepare makes the two calls an order needs and combines them. It is
+	// an ordinary function: it takes a context, returns a value or an
+	// error, and knows nothing about being run concurrently.
+	prepare := func(ctx context.Context, o Order) (Shipment, error) {
+		address, err := api.address(ctx, o.Customer)
+		if err != nil {
+			return Shipment{}, fmt.Errorf("order %d: %w", o.ID, err)
+		}
+		inStock, err := api.inStock(ctx, o.SKU)
+		if err != nil {
+			return Shipment{}, fmt.Errorf("order %d: %w", o.ID, err)
+		}
+		return Shipment{o, address, inStock}, nil
+	}
+
+	// Eight orders, two 40ms calls each: 640ms one at a time. Four at a
+	// time it is two rounds of 80ms. Map keeps the orders in order, and
+	// CollectAll keeps going past the order that cannot be prepared.
 	start := time.Now()
-	pages, errs := catena.FromSlice(urls).
-		Filter(https).
-		Then(parallel.Map(ctx, 4, fetch)).
+	shipments, failures := orders.
+		Then(parallel.Map(ctx, 4, prepare)).
 		CollectAll()
-	fmt.Printf("fetched %d pages in about %v\n", len(pages), time.Since(start).Round(50*time.Millisecond))
-	for _, p := range pages[:3] {
-		fmt.Printf("  %s (%d bytes)\n", p.URL, p.Bytes)
+	fmt.Printf("prepared %d shipments in about %v (sequentially: 640ms)\n",
+		len(shipments), time.Since(start).Round(40*time.Millisecond))
+	for _, s := range shipments[:3] {
+		fmt.Printf("  #%d -> %-12s in stock: %v\n", s.Order.ID, s.Address, s.InStock)
 	}
-	fmt.Println("failures:", errs)
+	fmt.Println("could not prepare:", failures)
 
-	// The same stage under a different policy: Collect stops at the
-	// first error. The calls still in flight are cancelled through their
-	// context and joined before Collect returns.
-	var started atomic.Int32
-	counted := func(ctx context.Context, url string) (Page, error) {
-		started.Add(1)
-		return fetch(ctx, url)
-	}
-	got, err := catena.FromSlice(urls).
-		Filter(https).
-		Then(parallel.Map(ctx, 2, counted)).
-		Collect()
-	fmt.Printf("stop at first error: %d pages, then %v\n", len(got), err)
-	fmt.Printf("  %d of 8 fetches were ever started\n", started.Load())
+	// The same stage under a stricter policy. Collect stops at the first
+	// failure; the calls still in flight are cancelled through their
+	// context and have finished before Collect returns.
+	api.requests.Store(0)
+	_, err := orders.Then(parallel.Map(ctx, 4, prepare)).Collect()
+	fmt.Printf("strict run stopped: %v\n", err)
+	fmt.Printf("  it made %d of the 16 requests a full run makes\n", api.requests.Load())
 
-	// MapUnordered yields each result as its call finishes: the same
-	// elements, in completion order. Sort when the order matters.
-	sizes := catena.FromSlice(urls).
-		Filter(https).
-		Then(parallel.MapUnordered(ctx, 4, fetch)).
-		Ignore().
-		Map(func(p Page) int { return p.Bytes }).
-		Collect()
-	slices.Sort(sizes)
-	fmt.Println("page sizes:", sizes)
-
-	// ForEach is the terminal: run for effect, get the first error back.
-	var total atomic.Int64
-	err = catena.Range(1, 101, 1).Then(parallel.ForEach(ctx, 8, func(_ context.Context, n int) error {
-		total.Add(int64(n))
-		return nil
-	}))
-	fmt.Println("sum of 1..100, eight at a time:", total.Load(), err)
-
-	// ChunkedWithin batches by size OR by time. This source sends a burst
-	// of five, goes quiet, then sends two more: the burst closes a batch
-	// on size, and the deadline flushes what the silence left behind —
-	// where Chunked would hold it until more arrived.
-	bursty := catena.Seq[int](func(yield func(int) bool) {
-		for i := range 7 {
-			if i == 5 {
-				time.Sleep(300 * time.Millisecond)
+	// When order does not matter, MapUnordered hands each result over as
+	// its call finishes. Here: which SKUs are out of stock — the answer
+	// is a set, so nothing is gained by waiting for the slow ones in turn.
+	missing := catena.Of("kbd-01", "mse-07", "mon-27", "cam-02").
+		Then(parallel.MapUnordered(ctx, 4, func(ctx context.Context, sku string) (string, error) {
+			ok, err := api.inStock(ctx, sku)
+			if err != nil || ok {
+				return "", err
 			}
-			if !yield(i) {
+			return sku, nil
+		})).
+		Ignore().
+		Filter(func(sku string) bool { return sku != "" }).
+		Collect()
+	fmt.Println("out of stock:", missing)
+
+	// Not every concurrent job is "the same call for many inputs".
+	// Sometimes it is three different calls that a page needs at once. A
+	// sequence of functions does that: ForEach runs them together and
+	// returns the first error, having cancelled the others.
+	var address string
+	var stocked bool
+	var recent int
+	start = time.Now()
+	err = catena.Of(
+		func(ctx context.Context) (err error) { address, err = api.address(ctx, "ada"); return },
+		func(ctx context.Context) (err error) { stocked, err = api.inStock(ctx, "kbd-01"); return },
+		func(ctx context.Context) (err error) { recent, err = api.recentOrders(ctx, "ada"); return },
+	).Then(parallel.ForEach(ctx, 3, func(ctx context.Context, load func(context.Context) error) error {
+		return load(ctx)
+	}))
+	fmt.Printf("dashboard for ada in about %v: %s, kbd-01 in stock: %v, %d recent orders (err: %v)\n",
+		time.Since(start).Round(40*time.Millisecond), address, stocked, recent, err)
+
+	// And the write side. Audit events arrive whenever they arrive, and
+	// the audit log wants them in bulk: up to four per write, but never
+	// held back more than 100ms. Chunked alone would sit on the last
+	// partial batch until more events came — or forever.
+	events := make(chan string)
+	go func() {
+		defer close(events)
+		for i := 1; i <= 6; i++ {
+			if i == 6 {
+				time.Sleep(300 * time.Millisecond) // a quiet spell
+			}
+			events <- fmt.Sprintf("shipped #%d", 1000+i)
+		}
+	}()
+	fmt.Println("audit log writes:")
+	for batch := range catena.FromChan(ctx, events).Then(parallel.ChunkedWithin[string](4, 100*time.Millisecond)) {
+		fmt.Printf("  %d events: %v\n", len(batch), batch)
+	}
+}
+
+// ---- the services ----
+
+type services struct {
+	*httptest.Server
+	requests atomic.Int64
+}
+
+// startServices runs the customer, inventory and order-history services
+// as one local HTTP server, each request taking 40ms.
+func startServices() *services {
+	s := &services{}
+	addresses := map[string]string{
+		"ada": "12 Canal St", "bob": "4 Hill Rd", "cy": "9 Dock Lane",
+		"dee": "77 Mill Way", "eve": "3 Elm Court", "flo": "58 Quay Side",
+	}
+	outOfStock := map[string]bool{"mon-27": true}
+	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.requests.Add(1)
+		select {
+		case <-time.After(40 * time.Millisecond):
+		case <-r.Context().Done(): // the client gave up: so do we
+			return
+		}
+		kind, name, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+		switch kind {
+		case "customers":
+			address, ok := addresses[name]
+			if !ok {
+				http.Error(w, "no customer "+name, http.StatusNotFound)
 				return
 			}
+			json.NewEncoder(w).Encode(address)
+		case "stock":
+			json.NewEncoder(w).Encode(!outOfStock[name])
+		case "history":
+			json.NewEncoder(w).Encode(len(name) - 1)
 		}
-	})
-	fmt.Println("batches of up to 3, or 100ms:")
-	for batch := range bursty.Then(parallel.ChunkedWithin[int](3, 100*time.Millisecond)) {
-		fmt.Printf("  %v\n", batch)
+	}))
+	return s
+}
+
+// call makes one request and decodes its JSON answer. It passes the
+// context on, which is what lets a stage cancel a request it no longer
+// needs.
+func call[T any](ctx context.Context, s *services, path string) (T, error) {
+	var out T
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.URL+path, nil)
+	if err != nil {
+		return out, err
 	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return out, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return out, fmt.Errorf("%s: %s", path, resp.Status)
+	}
+	return out, json.NewDecoder(resp.Body).Decode(&out)
+}
+
+func (s *services) address(ctx context.Context, customer string) (string, error) {
+	return call[string](ctx, s, "/customers/"+customer)
+}
+
+func (s *services) inStock(ctx context.Context, sku string) (bool, error) {
+	return call[bool](ctx, s, "/stock/"+sku)
+}
+
+func (s *services) recentOrders(ctx context.Context, customer string) (int, error) {
+	return call[int](ctx, s, "/history/"+customer)
 }
 ```
 

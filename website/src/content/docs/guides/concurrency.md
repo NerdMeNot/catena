@@ -1,27 +1,42 @@
 ---
 title: "Concurrency"
-description: "The core package never starts a goroutine on your behalf — ToChan is the one exception, and it says so. Everything that does lives in a package of its own, catena/parallel, so that importing it is the moment you opt in:"
+description: "You have a function that waits — on an API, a query, a disk — and a few hundred things to call it for. One at a time, the program spends its life waiting. catena/parallel calls it for several at once:"
 sidebar:
   order: 6
 ---
 
-The core package never starts a goroutine on your behalf — `ToChan` is the
-one exception, and it says so. Everything that does lives in a package of
-its own, `catena/parallel`, so that importing it is the moment you opt in:
+You have a function that waits — on an API, a query, a disk — and a few
+hundred things to call it for. One at a time, the program spends its life
+waiting. `catena/parallel` calls it for several at once:
 
 ```go
 import "github.com/NerdMeNot/catena/parallel"
 
-bodies, err := catena.FromSlice(urls).
-    Filter(isHTTPS).
-    Then(parallel.Map(ctx, 8, fetch)). // eight fetches at a time, in order
+// func loadCustomer(ctx context.Context, id CustomerID) (Customer, error)
+
+customers, err := catena.FromSlice(ids).
+    Then(parallel.Map(ctx, 8, loadCustomer)). // eight calls in flight, results in order
     Collect()
 ```
 
-`fetch` is a `func(context.Context, string) (Body, error)`. The result is
-a `Try[Body]`, so everything in [error handling](/guides/error-handling/)
-applies unchanged: `Collect` stops at the first failure, `CollectAll`
-gathers them, `Ignore` skips.
+`loadCustomer` is an ordinary function: it takes a context, returns a
+value or an error, and knows nothing about being run concurrently. What
+you get back is what you would have got from a loop — the customers, in
+the order of the ids, or the first error — in an eighth of the time.
+
+What you did not write is the part that goes wrong by hand: the
+semaphore, the `WaitGroup`, the results slice indexed so they come back
+in order, the error channel, cancelling the rest when one fails, and
+making sure nothing is still running when you return.
+
+The result is a `Try[Customer]`, so everything in
+[error handling](/guides/error-handling/) applies unchanged: `Collect` stops
+at the first failure and cancels the calls still in flight, `CollectAll`
+runs them all and gathers the failures, `Ignore` skips them.
+
+The core package never starts a goroutine on your behalf — `ToChan` is
+the one exception, and it says so. Everything that does lives here, so
+that importing `parallel` is the moment you opt in.
 
 ## When it is worth it
 
@@ -126,6 +141,31 @@ returns the first error, having cancelled and joined the rest.
 ```go
 err := catena.FromSlice(jobs).Then(parallel.ForEach(ctx, 16, run))
 ```
+
+## A handful of different calls at once
+
+Not every concurrent job is the same function over many inputs. A page
+often needs three *different* things that have nothing to do with each
+other, and there is no reason to fetch them in turn. A sequence of
+functions does it:
+
+```go
+var user User
+var orders []Order
+var recs []Product
+
+err := catena.Of(
+    func(ctx context.Context) (err error) { user, err = loadUser(ctx, id); return },
+    func(ctx context.Context) (err error) { orders, err = loadOrders(ctx, id); return },
+    func(ctx context.Context) (err error) { recs, err = loadRecs(ctx, id); return },
+).Then(parallel.ForEach(ctx, 3, func(ctx context.Context, load func(context.Context) error) error {
+    return load(ctx)
+}))
+```
+
+All three run together; the first to fail cancels the other two; and by
+the time `err` is assigned all three have returned, so reading `user`,
+`orders` and `recs` afterwards is safe.
 
 ## Errors and cancellation
 

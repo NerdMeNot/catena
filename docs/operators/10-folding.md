@@ -15,11 +15,15 @@ Full drain
 :::
 
 ```go
-fmt.Println(catena.Of(1, 2, 3).Fold(100, func(acc, n int) int { return acc + n }))
+// The seed is where the result starts: an opening balance of 100,
+// then the day's deposits and withdrawals.
+ledger := catena.Of(250, -75, -20)
+balance := ledger.Fold(100, func(balance, amount int) int { return balance + amount })
+fmt.Println(balance)
 ```
 
 ```
-106
+255
 ```
 
 ## FoldIndexed
@@ -35,11 +39,20 @@ Full drain
 :::
 
 ```go
-fmt.Println(catena.Of(10, 20).FoldIndexed(0, func(i, acc, n int) int { return acc + i*n }))
+// The fold knows where it is: gather the line number of every
+// failing package.
+results := catena.Of("ok   pkg/api", "FAIL pkg/db", "ok   pkg/web", "FAIL pkg/auth")
+failedAt := results.FoldIndexed([]int(nil), func(i int, lines []int, line string) []int {
+	if strings.HasPrefix(line, "FAIL") {
+		return append(lines, i+1)
+	}
+	return lines
+})
+fmt.Println(failedAt)
 ```
 
 ```
-20
+[2 4]
 ```
 
 ## FoldWhile
@@ -52,15 +65,18 @@ FoldWhile folds until f reports false; the accumulator from the stopping call is
 
 ```go
 // Stops when the callback says so; the accumulator from the stopping
-// call is included.
-fmt.Println(catena.Of(1, 2, 3, 4).FoldWhile(0, func(acc, n int) (int, bool) {
-	acc += n
-	return acc, acc < 5
-}))
+// call is included. The file that tips the batch past 10 MB is
+// counted, and the one after it is never looked at.
+fileMB := catena.Of(4, 3, 5, 2)
+batchMB := fileMB.FoldWhile(0, func(total, size int) (int, bool) {
+	total += size
+	return total, total < 10
+})
+fmt.Println(batchMB)
 ```
 
 ```
-6
+12
 ```
 
 ## FoldErr
@@ -72,18 +88,21 @@ func (s Seq[T]) FoldErr[A any](init A, f func(A, T) (A, error)) (A, error)
 FoldErr folds until f fails, returning the accumulator so far and the first error.
 
 ```go
-// Stops at the first error and returns the accumulator so far.
-acc, err := catena.Of(1, 2, 3).FoldErr(0, func(acc, n int) (int, error) {
-	if n == 3 {
-		return 0, errors.New("three is too many")
+// Stops at the first error and returns the accumulator so far: the
+// total of the rows that did parse, and why the next one did not.
+amounts := catena.Of("12", "30", "n/a", "7")
+total, err := amounts.FoldErr(0, func(sum int, field string) (int, error) {
+	n, err := strconv.Atoi(field)
+	if err != nil {
+		return 0, err
 	}
-	return acc + n, nil
+	return sum + n, nil
 })
-fmt.Println(acc, err)
+fmt.Println(total, err)
 ```
 
 ```
-3 three is too many
+42 strconv.Atoi: parsing "n/a": invalid syntax
 ```
 
 ## FoldBy
@@ -101,8 +120,8 @@ Full drain; map iteration order is undefined
 :::
 
 ```go
-// Streaming aggregation per key. GroupBy would retain every element;
-// this retains one accumulator per distinct key.
+// Streaming aggregation per key. GroupBy would retain every sale;
+// this retains one running total per region.
 type sale struct {
 	Region string
 	Amount int
@@ -135,15 +154,21 @@ Full drain
 :::
 
 ```go
-// Uses the first element as the seed, so it reports false on empty
-// rather than inventing a zero.
-v, ok := catena.Of(3, 1, 2).Reduce(func(a, b int) int { return a * b })
-_, empty := catena.Empty[int]().Reduce(func(a, b int) int { return a })
-fmt.Println(v, ok, empty)
+// Uses the first element as the seed, so it suits values with no
+// natural zero — and reports false on empty rather than inventing one.
+type window struct{ From, To int }
+merge := func(a, b window) window {
+	return window{min(a.From, b.From), max(a.To, b.To)}
+}
+outages := catena.Of(window{13, 14}, window{9, 11}, window{16, 17})
+
+span, ok := outages.Reduce(merge)
+_, nonEmpty := catena.Empty[window]().Reduce(merge)
+fmt.Println(span, ok, nonEmpty)
 ```
 
 ```
-6 true false
+{9 17} true false
 ```
 
 ## FoldedBy
@@ -163,19 +188,24 @@ Fully drains the source before the first emission — hangs on infinite input
 ```go
 // FoldBy that stays in the chain: keys come out in the order they
 // were first seen, so the result is deterministic and keeps flowing.
-words := catena.Of("pear", "apple", "plum", "avocado", "fig")
-fmt.Println(words.
+type hit struct {
+	Path  string
+	Bytes int
+}
+hits := catena.Of(hit{"/checkout", 900}, hit{"/home", 2400}, hit{"/health", 2}, hit{"/checkout", 1100})
+hits.
 	FoldedBy(
-		func(w string) byte { return w[0] },
-		func(byte) int { return 0 },
-		func(n int, w string) int { return n + len(w) },
+		func(h hit) string { return h.Path },
+		func(string) int { return 0 },
+		func(sum int, h hit) int { return sum + h.Bytes },
 	).
-	MapTo(func(initial byte, letters int) string { return fmt.Sprintf("%c=%d", initial, letters) }).
-	Collect())
+	Filter(func(_ string, bytes int) bool { return bytes >= 1000 }).
+	ForEach(func(path string, bytes int) { fmt.Println(path, bytes) })
 ```
 
 ```
-[p=8 a=12 f=3]
+/checkout 2000
+/home 2400
 ```
 
 ## GroupedBy
@@ -192,17 +222,17 @@ Fully drains the source before the first emission and retains every element — 
 
 ```go
 // GroupBy in first-seen key order, as a sequence of pairs rather
-// than a map.
-words := catena.Of("pear", "apple", "plum", "fig")
-for initial, group := range catena.GroupedBy(words, func(w string) byte { return w[0] }) {
-	fmt.Printf("%c %v\n", initial, group)
+// than a map — so it can be ranged over and printed as it stands.
+files := catena.Of("main.go", "README.md", "server.go", "deploy.yaml")
+for ext, names := range catena.GroupedBy(files, filepath.Ext) {
+	fmt.Println(ext, names)
 }
 ```
 
 ```
-p [pear plum]
-a [apple]
-f [fig]
+.go [main.go server.go]
+.md [README.md]
+.yaml [deploy.yaml]
 ```
 
 ## GroupBy
@@ -219,17 +249,17 @@ Full drain; retains every element; map iteration order is undefined
 
 ```go
 // Retains every element. For an aggregate, FoldBy is bounded by keys.
-byParity := catena.Range(1, 6, 1).GroupBy(func(n int) string {
-	if n%2 == 0 {
-		return "even"
-	}
-	return "odd"
-})
-fmt.Println(byParity["odd"], byParity["even"])
+type order struct {
+	Customer string
+	ID       int
+}
+orders := catena.Of(order{"acme", 1001}, order{"globex", 1002}, order{"acme", 1003})
+byCustomer := orders.GroupBy(func(o order) string { return o.Customer })
+fmt.Println(len(byCustomer["acme"]), byCustomer["globex"])
 ```
 
 ```
-[1 3 5] [2 4]
+2 [{globex 1002}]
 ```
 
 ## IndexBy
@@ -245,14 +275,18 @@ Full drain; map iteration order is undefined
 :::
 
 ```go
-// A lookup table; on a duplicate key the last element wins.
-m := catena.Of("apple", "avocado", "blueberry").
-	IndexBy(func(s string) byte { return s[0] })
-fmt.Println(string(m['a']), string(m['b']))
+// A lookup table; on a duplicate key the last element wins — which
+// is what defaults followed by overrides want.
+type setting struct{ Key, Value string }
+config := catena.Of(
+	setting{"port", "8080"}, setting{"log", "info"}, // defaults
+	setting{"port", "9090"}, // override
+).IndexBy(func(s setting) string { return s.Key })
+fmt.Println(config["port"].Value, config["log"].Value)
 ```
 
 ```
-avocado blueberry
+9090 info
 ```
 
 ## TallyBy
@@ -268,13 +302,14 @@ Full drain; map iteration order is undefined
 :::
 
 ```go
-counts := catena.Of("apple", "avocado", "blueberry").
-	TallyBy(func(s string) byte { return s[0] })
-fmt.Println(counts['a'], counts['b'])
+// A count per key, with no group ever built: responses by class.
+statuses := catena.Of(200, 503, 201, 404, 500, 200)
+byClass := statuses.TallyBy(func(code int) string { return fmt.Sprintf("%dxx", code/100) })
+fmt.Println(byClass["2xx"], byClass["4xx"], byClass["5xx"])
 ```
 
 ```
-2 1
+3 1 2
 ```
 
 ## Associate
@@ -290,14 +325,17 @@ Full drain; map iteration order is undefined
 :::
 
 ```go
-m := catena.Of(1, 2).Associate(func(n int) (int, string) {
-	return n, strings.Repeat("*", n)
-})
-fmt.Println(m[1], m[2])
+// Each element supplies both the key and the value.
+env := catena.Of("HOME=/home/ada", "SHELL=/bin/zsh", "LANG=en_GB.UTF-8").
+	Associate(func(line string) (string, string) {
+		name, value, _ := strings.Cut(line, "=")
+		return name, value
+	})
+fmt.Println(env["SHELL"], env["LANG"])
 ```
 
 ```
-* **
+/bin/zsh en_GB.UTF-8
 ```
 
 ## Partition
@@ -314,12 +352,15 @@ Full drain
 
 ```go
 // Both sides in one pass, each in encounter order.
-even, odd := catena.Range(1, 6, 1).Partition(func(n int) bool { return n%2 == 0 })
-fmt.Println(even, odd)
+signups := catena.Of("ada@example.com", "bob", "eve@example.org", "n/a")
+valid, rejected := signups.Partition(func(email string) bool {
+	return strings.Contains(email, "@")
+})
+fmt.Println(valid, rejected)
 ```
 
 ```
-[2 4] [1 3 5]
+[ada@example.com eve@example.org] [bob n/a]
 ```
 
 ## AssociateWith
@@ -335,12 +376,16 @@ Full drain; map iteration order is undefined
 :::
 
 ```go
-m := catena.AssociateWith(catena.Of("go", "rust"), func(s string) int { return len(s) })
-fmt.Println(m["go"], m["rust"])
+// The elements become the keys; the function supplies each value.
+hosts := catena.Of("web-1", "db-1")
+probes := catena.AssociateWith(hosts, func(host string) string {
+	return "https://" + host + ".internal/healthz"
+})
+fmt.Println(probes["db-1"])
 ```
 
 ```
-2 4
+https://db-1.internal/healthz
 ```
 
 ## Tally
@@ -356,11 +401,14 @@ Full drain; map iteration order is undefined
 :::
 
 ```go
-fmt.Println(catena.Tally(catena.Of("a", "b", "a"))["a"])
+// How many times each value occurs.
+methods := catena.Of("GET", "POST", "GET", "GET", "DELETE")
+counts := catena.Tally(methods)
+fmt.Println(counts["GET"], counts["POST"], counts["PUT"])
 ```
 
 ```
-2
+3 1 0
 ```
 
 ## ToKeySet
@@ -376,9 +424,10 @@ Full drain; map iteration order is undefined
 :::
 
 ```go
-set := catena.ToKeySet(catena.Of(1, 2, 2))
-_, has := set[2]
-fmt.Println(len(set), has)
+// Duplicates collapse into a set built for membership tests.
+blocked := catena.ToKeySet(catena.Of("10.0.0.7", "10.0.0.9", "10.0.0.7"))
+_, denied := blocked["10.0.0.9"]
+fmt.Println(len(blocked), denied)
 ```
 
 ```

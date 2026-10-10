@@ -1,12 +1,16 @@
 ---
 title: "Getting started"
-description: "catena needs Go 1.27 or later — the chainable API is built on generic methods, which arrived in 1.27. There are no dependencies."
+description: "Five minutes, four ideas: a pipeline, a grouped total, errors that the caller gets to decide about, and slow calls run several at a time. By the end you will know whether catena fits the code you write."
 sidebar:
   order: 1
 ---
 
-catena needs Go 1.27 or later — the chainable API is built on generic
-methods, which arrived in 1.27. There are no dependencies.
+Five minutes, four ideas: a pipeline, a grouped total, errors that the
+caller gets to decide about, and slow calls run several at a time. By
+the end you will know whether catena fits the code you write.
+
+It needs Go 1.27 or later — the chainable API is built on generic
+methods, which arrived in 1.27 — and has no dependencies.
 
 ```sh
 go get github.com/NerdMeNot/catena
@@ -17,17 +21,24 @@ go get github.com/NerdMeNot/catena
 ```go
 import "github.com/NerdMeNot/catena"
 
-evens := catena.Range(0, 100, 1).
-    Filter(func(n int) bool { return n%2 == 0 }).
-    Map(func(n int) int { return n * n }).
+// The first five accounts with a failed login today.
+suspects := catena.FromSlice(events).
+    Filter(func(e Event) bool { return e.Kind == "login" && !e.OK }).
+    Map(func(e Event) string { return e.Account }).
     Take(5).
     Collect()
-// [0 4 16 36 64]
 ```
 
-Everything before `Collect` is lazy: nothing runs until a terminal consumes
-the sequence, and `Take(5)` means only five squares are ever computed —
-even though the range describes a hundred.
+Read it top to bottom and it says what it does. Nothing runs until
+`Collect` asks for the result, and `Take(5)` means the scan stops at the
+fifth match — a day with ten million events is read only as far as it
+needs to be. The loop this replaces has a counter, a `break`, and an
+`append`; none of them were the point.
+
+A callback does not have to be a closure. If `Event` has a method
+`FailedLogin() bool`, the method expression `Event.FailedLogin` is
+already a function of an event, and `Filter(Event.FailedLogin)` reads
+better still.
 
 `Seq` is Go's `iter.Seq` underneath, so `range` works directly and nothing
 needs converting at either edge:

@@ -7,8 +7,10 @@
 
 # catena
 
-**Lazy, fully typed sequence pipelines for Go.**
-Kotlin-stdlib and LINQ ergonomics on top of `iter.Seq`, built on Go 1.27 generic methods.
+**Say what you want from the data. Skip the loop.**
+Chained, fully typed, lazy pipelines for Go — the grouping loop, the worker
+pool and the error plumbing, already written and tested harder than you
+would test your own.
 
 [![CI](https://github.com/NerdMeNot/catena/actions/workflows/ci.yml/badge.svg)](https://github.com/NerdMeNot/catena/actions/workflows/ci.yml)
 [![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](.github/workflows/ci.yml)
@@ -20,16 +22,11 @@ Kotlin-stdlib and LINQ ergonomics on top of `iter.Seq`, built on Go 1.27 generic
 </div>
 
 ```go
-// Order and UserID are your own types; orders is a []Order.
-top := catena.FromSlice(orders).
-    Filter(func(o Order) bool { return o.Paid }).
-    TopNBy(10, func(o Order) int { return o.Amount })
-
-byUser := catena.FromSlice(orders).FoldBy(
-    func(o Order) UserID { return o.User },
-    func(UserID) int { return 0 },
-    func(sum int, o Order) int { return sum + o.Amount },
-)
+// The ten largest overdue invoices. One pass; ten rows in memory, not the table.
+overdue := catena.FromSlice(invoices).
+    FilterNot(Invoice.IsPaid).
+    Filter(func(i Invoice) bool { return i.Due.Before(today) }).
+    TopNBy(10, Invoice.Amount)
 ```
 
 ```sh
@@ -44,6 +41,58 @@ library, and `go list -deps` on the package and its sub-packages resolves
 to the standard library alone.
 
 *Catena* is Latin for "chain".
+
+---
+
+## Three things you stop writing
+
+**The grouping loop** — the map, the slice of keys so the output has an
+order, the `if _, ok`, the sort at the end:
+
+```go
+// Revenue per country, largest first. Memory is bounded by the number of
+// countries, not the number of orders.
+ranked := catena.FromSlice(orders).
+    FoldedBy(Order.Country,
+        func(string) int { return 0 },
+        func(sum int, o Order) int { return sum + o.Total }).
+    MapTo(func(country string, total int) Row { return Row{country, total} }).
+    SortedByDesc(func(r Row) int { return r.Total })
+```
+
+**The worker pool** — the semaphore, the `WaitGroup`, the results slice
+indexed so things come back in order, the error channel, cancelling the
+rest when one fails:
+
+```go
+// func loadCustomer(ctx context.Context, id ID) (Customer, error)
+
+customers, err := catena.FromSlice(ids).
+    Then(parallel.Map(ctx, 8, loadCustomer)). // 8 in flight, results in order
+    Collect()                                 // first error cancels the rest
+```
+
+`loadCustomer` is an ordinary function. Every goroutine has exited by the
+time `Collect` returns — on success, on error, on cancel and on panic.
+
+**The error plumbing** — the `if err != nil` on every other line, and the
+decision about what a bad row means buried where the caller cannot
+change it:
+
+```go
+rows := source.Lines(open).MapErr(parseRow) // a failure is an element
+
+good, err  := rows.Collect()          // stop at the first bad row
+good, errs := rows.CollectAll()       // import what parses, report the rest
+good       := rows.Ignore().Collect() // skip bad rows
+```
+
+The file is opened when the pipeline runs, and closed on every way out
+of it.
+
+Callbacks do not have to be closures: a method expression such as
+`Invoice.IsPaid` or `Order.Country` is already a function of its
+receiver, and goes wherever a callback does.
 
 ---
 

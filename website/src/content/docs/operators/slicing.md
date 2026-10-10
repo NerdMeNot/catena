@@ -16,14 +16,17 @@ func (s Seq[T]) Take(n int) Seq[T]
 Take yields at most the first n elements, consuming exactly as many as it yields. Panics if n is negative.
 
 ```go
-// Consumes exactly what it emits, so it bounds an infinite source.
-fmt.Println(catena.Generate(1, func(n int) int { return n + 1 }).
-	Take(3).
-	Collect())
+// The next three invoice numbers from a counter that never ends.
+// Take consumes exactly what it emits, so it bounds an infinite
+// source.
+invoices := catena.Generate(1041, func(n int) int { return n + 1 }).
+	Map(func(n int) string { return fmt.Sprintf("INV-%d", n) })
+
+fmt.Println(invoices.Take(3).Collect())
 ```
 
 ```
-[1 2 3]
+[INV-1041 INV-1042 INV-1043]
 ```
 
 ## TakeWhile
@@ -35,15 +38,26 @@ func (s Seq[T]) TakeWhile(pred func(T) bool) Seq[T]
 TakeWhile yields elements until pred first returns false.
 
 ```go
-// Stops at the first element that fails — unlike Filter, which would
-// keep testing the rest.
-fmt.Println(catena.Of(1, 2, 9, 3).
-	TakeWhile(func(n int) bool { return n < 5 }).
+// The build steps that passed before the first failure. It stops at
+// the first element that fails — unlike Filter, which would keep
+// testing the rest and let "package" through.
+type step struct {
+	Name   string
+	Passed bool
+}
+steps := catena.Of(
+	step{"lint", true}, step{"build", true},
+	step{"test", false}, step{"package", true},
+)
+
+fmt.Println(steps.
+	TakeWhile(func(s step) bool { return s.Passed }).
+	Map(func(s step) string { return s.Name }).
 	Collect())
 ```
 
 ```
-[1 2]
+[lint build]
 ```
 
 ## TakeLast
@@ -59,11 +73,21 @@ Buffers n elements and fully drains the source before emitting — hangs on infi
 :::
 
 ```go
-fmt.Println(catena.Range(1, 8, 1).TakeLast(3).Collect())
+// tail -n 2: the end of a log. It buffers only n lines, but has to
+// read the source to its end to know which they are.
+log := catena.Of(
+	"12:00:01 starting",
+	"12:00:02 listening on :8080",
+	"12:04:37 upstream timeout",
+	"12:04:38 shutting down",
+)
+
+log.TakeLast(2).ForEach(func(line string) { fmt.Println(line) })
 ```
 
 ```
-[5 6 7]
+12:04:37 upstream timeout
+12:04:38 shutting down
 ```
 
 ## Drop
@@ -75,11 +99,15 @@ func (s Seq[T]) Drop(n int) Seq[T]
 Drop skips the first n elements. Panics if n is negative.
 
 ```go
-fmt.Println(catena.Of("a", "b", "c", "d").Drop(2).Collect())
+// Pagination: skip the pages already shown, then take one page.
+results := catena.Of("ada", "bob", "cyd", "dee", "eve", "fay", "gus")
+page, size := 1, 3
+
+fmt.Println(results.Drop(page * size).Take(size).Collect())
 ```
 
 ```
-[c d]
+[dee eve fay]
 ```
 
 ## DropWhile
@@ -91,15 +119,24 @@ func (s Seq[T]) DropWhile(pred func(T) bool) Seq[T]
 DropWhile skips elements until pred first returns false, then yields the rest.
 
 ```go
-// Drops only the leading run; once the predicate fails, everything
-// after is kept.
-fmt.Println(catena.Of(0, 0, 3, 0, 5).
-	DropWhile(func(n int) bool { return n == 0 }).
-	Collect())
+// Skips the comment banner at the top of a config file. Only the
+// leading run is dropped; once the predicate fails, everything after
+// is kept — including the later comment.
+config := catena.Of(
+	"# managed by ops",
+	"# do not edit",
+	"port = 8080",
+	"# seconds",
+	"timeout = 30",
+)
+
+fmt.Println(config.
+	DropWhile(func(line string) bool { return strings.HasPrefix(line, "#") }).
+	JoinToString("; ", catena.Self[string]))
 ```
 
 ```
-[3 0 5]
+port = 8080; # seconds; timeout = 30
 ```
 
 ## DropLast
@@ -115,11 +152,16 @@ Buffers n elements
 :::
 
 ```go
-fmt.Println(catena.Range(1, 6, 1).DropLast(2).Collect())
+// Strips a totals row off the end of an export without knowing how
+// long the export is. It runs n elements behind the source, and
+// buffers only those.
+export := catena.Of("ada,36.00", "bob,41.50", "eve,12.25", "TOTAL,89.75")
+
+fmt.Println(export.DropLast(1).Collect())
 ```
 
 ```
-[1 2 3]
+[ada,36.00 bob,41.50 eve,12.25]
 ```
 
 ## Step
@@ -131,10 +173,13 @@ func (s Seq[T]) Step(n int) Seq[T]
 Step yields the first element and every nth element after it. Panics if n <= 0.
 
 ```go
-// The first element always survives, then every nth after it.
-fmt.Println(catena.Range(0, 10, 1).Step(3).Collect())
+// Downsampling: one CPU reading in every three is enough for the
+// chart. The first element always survives, then every nth after it.
+cpuPercent := catena.Of(12, 15, 11, 40, 42, 38, 90, 88)
+
+fmt.Println(cpuPercent.Step(3).Collect())
 ```
 
 ```
-[0 3 6 9]
+[12 40 90]
 ```

@@ -5,39 +5,147 @@
 import ThemeToggle from '../components/ThemeToggle.astro'
 import site from '../data/site.json'
 
-const title = 'catena — lazy sequence pipelines for Go'
+const title = 'catena — pipelines for Go: say what you want from the data'
 const description =
-  'Lazy, fully typed sequence pipelines for Go 1.27+. Kotlin and LINQ ergonomics on ' +
-  'iter.Seq, with every operator’s memory and termination behaviour specified and tested.'
+  'Chained, fully typed, lazy pipelines for Go 1.27+. The grouping loop, the worker pool ' +
+  'and the error plumbing, already written — with every operator’s memory and termination ' +
+  'behaviour specified and tested.'
+
+// A deliberately small highlighter: the code on this page is written here
+// as plain Go and marked up at build time, so it can be read, edited and
+// copied without a forest of spans. Comments, strings, keywords, numbers.
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const go = (src: string) =>
+  src
+    .trim()
+    .split('\n')
+    .map((line) => {
+      const at = line.indexOf('//')
+      const code = at >= 0 ? line.slice(0, at) : line
+      const comment = at >= 0 ? `<span class="c">${esc(line.slice(at))}</span>` : ''
+      const marked = esc(code)
+        .replace(/("[^"]*")/g, '<span class="s">$1</span>')
+        .replace(/\b(func|return|var|if|for|range|defer|err)\b(?![^<]*<\/span>)/g, '<span class="k">$1</span>')
+        .replace(/\b(\d+)\b(?![^<]*<\/span>)/g, '<span class="n">$1</span>')
+      return marked + comment
+    })
+    .join('\n')
+
+const hero = go(`
+// The ten largest overdue invoices. One pass; ten rows in memory, not the table.
+overdue := catena.FromSlice(invoices).
+    FilterNot(Invoice.IsPaid).
+    Filter(func(i Invoice) bool { return i.Due.Before(today) }).
+    TopNBy(10, Invoice.Amount)
+`)
+
+const scenes = [
+  {
+    head: 'The grouping loop',
+    pain: `A map, a slice of keys so the output has an order, an <code>if _, ok</code>, and a
+           sort at the end. You have written it a hundred times.`,
+    code: go(`
+// Revenue per country, largest first.
+ranked := catena.FromSlice(orders).
+    FoldedBy(Order.Country,
+        func(string) int { return 0 },
+        func(sum int, o Order) int { return sum + o.Total }).
+    MapTo(func(country string, total int) Row { return Row{country, total} }).
+    SortedByDesc(func(r Row) int { return r.Total })
+`),
+    gain: `One pass, memory bounded by the number of countries rather than the number of
+           orders, keys in first-seen order, and the chain keeps going.`,
+  },
+  {
+    head: 'The worker pool',
+    pain: `A semaphore, a <code>WaitGroup</code>, a results slice indexed so things come back in
+           order, an error channel, cancelling the rest when one fails — and hoping nothing
+           is still running when you return.`,
+    code: go(`
+// func loadCustomer(ctx context.Context, id ID) (Customer, error)
+
+customers, err := catena.FromSlice(ids).
+    Then(parallel.Map(ctx, 8, loadCustomer)). // 8 in flight, results in order
+    Collect()                                 // first error cancels the rest
+`),
+    gain: `<code>loadCustomer</code> is an ordinary function. Every goroutine has exited by the
+           time <code>Collect</code> returns — on success, on error, on cancel, and on panic.`,
+  },
+  {
+    head: 'The error plumbing',
+    pain: `Half the loop is <code>if err != nil</code>, and whether a bad row aborts the import or
+           gets skipped is decided deep inside it, where the caller cannot change it.`,
+    code: go(`
+rows := source.Lines(open).MapErr(parseRow) // a failure is an element
+
+good, err  := rows.Collect()          // stop at the first bad row
+good, errs := rows.CollectAll()       // import what parses, report the rest
+good       := rows.Ignore().Collect() // skip bad rows
+`),
+    gain: `The pipeline carries the errors; the consumer picks the policy. The file is opened
+           when the pipeline runs and closed on every way out of it.`,
+  },
+]
 
 const commitments = [
   {
     head: 'Nothing is hidden',
-    body: `No reflect, no <code>any</code> in value position, no hidden goroutines, no hidden
-           buffering. An operator that buffers says so in its doc comment, with its bound; a
-           terminal that would hang on an infinite sequence is marked; every panic happens at
-           construction, at the line that made the mistake.`,
+    body: `No reflect, no <code>any</code> in value position, no buffering you were not told
+           about. An operator that buffers says so, with its bound; a terminal that would
+           hang on an infinite sequence is marked; a bad argument panics at the line that
+           passed it. The core package starts no goroutines — concurrency is a separate
+           import.`,
   },
   {
     head: 'Contracts tested, not promised',
-    body: `Every exported operator is registered in a conformance harness that consumes it
-           twice, runs it over infinite sources, breaks early and checks the producer’s cleanup
-           ran, and compares it against a hand-written loop. A completeness check fails CI for
-           any operator nothing registers. Statement coverage is 100%, enforced.`,
+    body: `Every operator is registered in a conformance harness that consumes it twice,
+           runs it over infinite sources, breaks early and checks the producer’s cleanup
+           ran, and compares it against a hand-written loop. CI fails for an operator
+           nothing registers. Statement coverage is 100%, enforced.`,
   },
   {
     head: 'Slow only where Go is slow',
-    body: `Benchmarked against the same pipelines hand-built from raw <code>iter.Seq</code>
-           closures, catena meets or beats the raw mechanism on every path — the library adds
-           nothing. What remains against a plain loop is the iterator protocol itself, and it
-           is published rather than waved at.`,
+    body: `A terminal over a slice compiles down to the loop you would have written:
+           <code>Sum</code> runs at exactly its speed. A chain of stages costs about 2.4ns an
+           element, which is the iterator protocol, not the library — against the same
+           pipeline built from raw <code>iter.Seq</code> closures catena is faster. Every
+           number is published, including the unflattering ones.`,
   },
 ]
 
 const wins = [
   ['FoldBy', 'GroupBy + fold per bucket', '2.97 MB → 1.2 KB'],
-  ['TopNBy(10)', 'SortedDesc().Take(10)', '4.1 MB → 1 KB, 32× faster'],
+  ['TopNBy(10, key)', 'SortedDesc().Take(10)', '1.7 MB → 1 KB, 32× faster'],
+  ['Sample(10, rng)', 'collect everything, shuffle', '803 KB → 456 B, 4.4× faster'],
   ['DedupeBy', 'DistinctBy on sorted input', 'unbounded → O(1)'],
+]
+
+const box = [
+  {
+    name: 'catena',
+    href: '/guides/operators/',
+    body: `Over 200 operators on four types: lazy <code>Seq</code>, pairs, fallible
+           <code>Try</code>, and eager <code>List</code>. Joins, grouping, windows, top-N,
+           sampling — and <code>range</code> works on all of it.`,
+  },
+  {
+    name: 'catena/parallel',
+    href: '/guides/concurrency/',
+    body: `Call a function for many inputs at once, bounded and in order. Batch a live
+           stream by size or by time. Nothing outlives the call.`,
+  },
+  {
+    name: 'catena/source',
+    href: '/operators/sources/',
+    body: `Lines of a file, pages of an API, rows of a query — opened when the pipeline
+           runs, released on every exit, including the early ones.`,
+  },
+  {
+    name: 'catenalint',
+    href: '/guides/linting/',
+    body: `A <code>go vet</code> tool that finds the pipeline sorting a million rows to keep
+           ten, and the one that was built and never run. It rewrites what it can prove.`,
+  },
 ]
 ---
 
@@ -106,32 +214,41 @@ const wins = [
 
     <main>
       <section class="hero">
-        <p class="eyebrow">Go {'≥'} 1.27 · v{site.version} · Apache-2.0</p>
-        <h1>Pipelines that say what they cost.</h1>
+        <p class="eyebrow">Go {'≥'} 1.27 · v{site.version} · Apache-2.0 · zero dependencies</p>
+        <h1>Say what you want from the data. Skip the loop.</h1>
         <p class="lede">
-          Kotlin and LINQ ergonomics on top of <code>iter.Seq</code>, built on Go 1.27
-          generic methods. Every operator declares its memory class, its termination
-          behaviour, and what it does with errors — and a conformance suite proves each one.
+          Go finally has the pieces for real pipelines — <code>iter.Seq</code> and generic
+          methods. catena is the library on top: chained, fully typed, lazy, and honest
+          about what every step costs. The loops you keep rewriting are already in it,
+          tested harder than you would test your own.
         </p>
 
-        <pre><code><span class="k">top</span> := catena.FromSlice(orders).
-    Filter(<span class="k">func</span>(o Order) <span class="k">bool</span> {'{'} <span class="k">return</span> o.Paid {'}'}).
-    TopNBy(<span class="n">10</span>, <span class="k">func</span>(o Order) <span class="k">int</span> {'{'} <span class="k">return</span> o.Amount {'}'})
-
-<span class="k">byUser</span> := catena.FromSlice(orders).FoldBy(
-    <span class="k">func</span>(o Order) UserID {'{'} <span class="k">return</span> o.User {'}'},
-    <span class="k">func</span>(UserID) <span class="k">int</span> {'{'} <span class="k">return</span> <span class="n">0</span> {'}'},
-    <span class="k">func</span>(sum <span class="k">int</span>, o Order) <span class="k">int</span> {'{'} <span class="k">return</span> sum + o.Amount {'}'},
-)</code></pre>
+        <pre><code set:html={hero} /></pre>
 
         <div class="install">
           <code>go get {site.module}</code>
         </div>
 
         <div class="cta">
-          <a class="primary" href="/guides/getting-started/">Get started</a>
-          <a class="secondary" href="/guides/concepts/">How it works</a>
+          <a class="primary" href="/guides/getting-started/">Get started in five minutes</a>
+          <a class="secondary" href="/guides/coming-from/">Coming from lo, Kotlin or LINQ?</a>
         </div>
+      </section>
+
+      <section class="scenes">
+        <h2>Three things you stop writing</h2>
+        {
+          scenes.map((sc) => (
+            <article>
+              <div class="say">
+                <h3>{sc.head}</h3>
+                <p set:html={sc.pain} />
+                <p class="gain" set:html={sc.gain} />
+              </div>
+              <pre><code set:html={sc.code} /></pre>
+            </article>
+          ))
+        }
       </section>
 
       <section class="commitments">
@@ -170,6 +287,24 @@ const wins = [
           <a href="/guides/performance/">The full benchmarks</a>, including what a pipeline
           costs against a hand-written loop and why.
         </p>
+      </section>
+
+      <section class="box">
+        <h2>What is in the box</h2>
+        <div class="cards">
+          {
+            box.map((b) => (
+              <a class="card" href={b.href}>
+                <code>{b.name}</code>
+                <p set:html={b.body} />
+              </a>
+            ))
+          }
+        </div>
+        <div class="cta closing">
+          <a class="primary" href="/guides/getting-started/">Read the five-minute tour</a>
+          <a class="secondary" href="/examples/concurrency/">See a real program</a>
+        </div>
       </section>
     </main>
 
@@ -288,7 +423,7 @@ const wins = [
         letter-spacing: -0.025em;
         font-variation-settings: 'opsz' 120;
         margin: 0 0 1rem;
-        max-width: 18ch;
+        max-width: 20ch;
         text-wrap: balance;
       }
 
@@ -378,6 +513,49 @@ const wins = [
       }
       .num { font-variant-numeric: tabular-nums; color: var(--body); }
 
+      pre .c { color: #8b949e; }
+      pre .s { color: #a5d6ff; }
+
+      .scenes { padding: 3rem 0 1rem; border-top: 1px solid var(--rule); }
+      .scenes > h2, .box > h2 {
+        font-family: var(--display);
+        font-size: 1.6rem;
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        margin: 0 0 2rem;
+      }
+      .scenes article {
+        display: grid;
+        grid-template-columns: minmax(15rem, 5fr) 8fr;
+        gap: 2rem;
+        align-items: start;
+        margin-bottom: 2.5rem;
+      }
+      .scenes h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 0.6rem; }
+      .scenes p { margin: 0 0 0.8rem; color: var(--body); font-size: 0.94rem; }
+      .scenes .gain { color: var(--ink); }
+      .scenes pre { margin: 0; }
+      .scenes code:not(pre code), .box p code { color: var(--ember-lift); font-size: 0.88em; }
+
+      .box { padding: 3rem 0 0; margin-top: 3rem; border-top: 1px solid var(--rule); }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+      }
+      .card {
+        display: block;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 1.1rem 1.2rem;
+        text-decoration: none;
+        color: inherit;
+      }
+      .card:hover { border-color: var(--ember); }
+      .card > code { color: var(--ink); font-weight: 500; font-size: 0.92rem; }
+      .card p { margin: 0.6rem 0 0; color: var(--body); font-size: 0.9rem; }
+
       footer {
         border-top: 1px solid var(--rule);
         max-width: 68rem;
@@ -387,6 +565,10 @@ const wins = [
         font-size: 0.86rem;
       }
       footer a { color: var(--muted); }
+
+      @media (max-width: 52rem) {
+        .scenes article { grid-template-columns: 1fr; gap: 1rem; }
+      }
 
       @media (max-width: 34rem) {
         nav { gap: 0.85rem; font-size: 0.85rem; }
