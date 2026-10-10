@@ -349,6 +349,26 @@ fmt.Println(parseAges().Errs().Count())
 1
 ```
 
+## UntilErr
+
+```go
+func (t Try[T]) UntilErr(err *error) Seq[T]
+```
+
+UntilErr yields the successful elements up to the first error, then stops and stores that error in *err: the policy Collect applies, as a sequence that keeps chaining. *err is set to nil when an iteration begins, so once the pipeline has been consumed it holds that run's first error, or nil — check it then, the way bufio.Scanner's Err is checked after the loop. Ignore keeps going past errors and Must panics on one; this is the exit that stops quietly and tells you why.
+
+```go
+// Stop at the first failure, but as a sequence: the chain goes on
+// with the full Seq API, and the error is checked once it has run.
+var err error
+total := parseAges().UntilErr(&err).Then(catena.Sum)
+fmt.Println(total, err)
+```
+
+```
+36 strconv.Atoi: parsing "unknown": invalid syntax
+```
+
 ## Fold
 
 ```go

@@ -302,6 +302,26 @@ func (t Try[T]) Errs() Seq[error] {
 	}
 }
 
+// UntilErr yields the successful elements up to the first error, then
+// stops and stores that error in *err: the policy Collect applies, as a
+// sequence that keeps chaining. *err is set to nil when an iteration
+// begins, so once the pipeline has been consumed it holds that run's first
+// error, or nil — check it then, the way bufio.Scanner's Err is checked
+// after the loop. Ignore keeps going past errors and Must panics on one;
+// this is the exit that stops quietly and tells you why.
+func (t Try[T]) UntilErr(err *error) Seq[T] {
+	return func(yield func(T) bool) {
+		*err = nil
+		t.each(func(v T, e error) bool {
+			if e != nil {
+				*err = e
+				return false
+			}
+			return yield(v)
+		})
+	}
+}
+
 // Must yields the successful elements and panics with the error value on
 // the first error — recover() receives the error itself.
 func (t Try[T]) Must() Seq[T] {

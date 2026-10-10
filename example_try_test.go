@@ -207,6 +207,15 @@ func ExampleTry_Count() {
 	// Output: 1 true
 }
 
+func ExampleTry_UntilErr() {
+	// Stop at the first failure, but as a sequence: the chain goes on
+	// with the full Seq API, and the error is checked once it has run.
+	var err error
+	total := parseAges().UntilErr(&err).Then(catena.Sum)
+	fmt.Println(total, err)
+	// Output: 36 strconv.Atoi: parsing "unknown": invalid syntax
+}
+
 func ExampleTry_Must() {
 	// For pipelines where a failure is a programming bug. The panic
 	// value is the error itself, so recover() can inspect it.

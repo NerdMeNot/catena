@@ -77,11 +77,11 @@ badge stale.
 
 **Slow only where Go is slow.** Measured against the same pipelines
 hand-built from raw `iter.Seq` closures, catena beats the raw mechanism on
-multi-stage pipelines and on terminals, and costs 4–13% more on
-single-stage shapes — where the baseline is inlined into its consumer and
-a call across a package boundary cannot be. What remains against a plain
-loop is the iterator protocol itself, and every number is published rather
-than waved at.
+multi-stage pipelines and on terminals, and costs 4% more on single-stage
+shapes — where the baseline is inlined into its consumer and a call across
+a package boundary cannot be. What remains against a plain loop is the
+iterator protocol itself, and every number is published rather than waved
+at.
 
 ## In practice
 
@@ -134,6 +134,7 @@ Not syntax sugar — these change the memory class of the computation.
 | `FoldBy` | `GroupBy` + fold per bucket | 2.97 MB → **1.2 KB** (bounded by keys, not elements) |
 | `TopNBy(10, sel)` | `SortedDesc().Take(10)` | 1.7 MB → **1 KB**, 32× faster (bounded heap) |
 | `DedupeBy` | `DistinctBy` on sorted input | unbounded seen-set → **O(1)** |
+| `Sample(10, rng)` | collecting everything to shuffle it | 803 KB → **456 B**, 4.4× faster (reservoir) |
 
 [`catenalint`](docs/07-linting.md) finds the left-hand column in your code
 and rewrites it where the result is provably the same.
@@ -146,21 +147,22 @@ elements, [bench_baseline_test.go](bench_baseline_test.go)):
 
 | Shape | Hand loop | Raw closures | catena |
 |---|---|---|---|
-| 4-stage pipeline (filter→map→filter→sum) | 39µs | 350µs | **262µs** |
-| `Sum` | 107µs | 178µs | **70µs** |
-| `Contains` | — | 116µs | **70µs** |
+| 4-stage pipeline (filter→map→filter→sum) | 25µs | 353µs | **261µs** |
+| `Sum` | 24µs | 178µs | **24µs** |
+| `Contains` | — | 130µs | **24µs** |
 
-Two facts fall out of that. **catena adds essentially nothing on top of
-Go's iterator mechanism** — on these three shapes it beats the raw-closure
-baseline outright, and across the [full table](docs/05-performance.md) its
-worst showing is 13% behind on a single-stage `Map`, where the baseline
-inlines into its caller and a library cannot. So what you give up is
-close to what `iter.Seq` itself costs. And
-that cost is real: against a plain loop doing trivial arithmetic a
-pipeline runs about 6.6× slower — roughly 2.2ns per element across the
-whole four-stage chain, in closure calls the compiler cannot flatten. If
-your loop body does anything beyond arithmetic — parses, allocates, touches a map or a socket
-— the per-element work buries it and the two converge.
+Two facts fall out of that. **catena adds nothing on top of Go's iterator
+mechanism** — on these three shapes it beats the raw-closure baseline
+outright, and across the [full table](docs/05-performance.md) its worst
+single-stage showing is 4% behind, where the baseline inlines into its
+caller and a library cannot. A terminal straight over a source, like `Sum`
+over a slice, the compiler flattens into the hand loop itself. And a chain
+of stages has a real cost: against a plain loop doing trivial arithmetic,
+the four-stage pipeline runs about 10× slower — roughly 2.4ns per element
+across the whole chain, in closure calls the compiler cannot flatten. If
+your loop body does anything beyond arithmetic — parses, allocates,
+touches a map or a socket — the per-element work buries it and the two
+converge.
 
 [The full benchmarks](docs/05-performance.md) show the code both ways, so
 you can judge what the nanoseconds buy.
@@ -169,7 +171,7 @@ you can judge what the nanoseconds buy.
 
 | Type | What it is |
 |---|---|
-| `Seq[T]` | lazy `iter.Seq[T]` with 88 methods — 40 chainable, 48 terminal; `range` works directly |
+| `Seq[T]` | lazy `iter.Seq[T]` with 94 methods — 41 chainable, 53 terminal; `range` works directly |
 | `Seq2[K, V]` | the stdlib pair currency; a bridge back to `Seq`, not a peer |
 | `Try[T]` | `iter.Seq2[T, error]`; error policy chosen by the consumer |
 | `List[T]` | eager `[]T` with the mirrored operation set — generated, and conformance-checked to agree with `AsSeq()` |
@@ -195,7 +197,7 @@ either kind, and `Then` keeps it unbroken:
 **[catena.nerdmenot.in](https://catena.nerdmenot.in)** — the documentation
 site: every guide and the full operator reference, versioned per release.
 
-**[Operator reference](docs/operators/README.md)** — all 197 operators
+**[Operator reference](docs/operators/README.md)** — all 206 operators
 across 16 pages, each with its signature, its memory and termination
 behaviour, and a worked example that `go test` runs and verifies.
 
@@ -208,6 +210,7 @@ Guides, in reading order:
 5. [Performance](docs/05-performance.md) — the three-way benchmarks, honestly
 6. [Concurrency](docs/06-concurrency.md) — the `parallel` package and its guarantee
 7. [Linting](docs/07-linting.md) — `catenalint` and what its fixes promise
-8. [Releasing](docs/08-releasing.md) — how a release is cut and verified
+8. [Coming from lo, Kotlin or LINQ](docs/08-coming-from.md) — the name you know, and catena's
+9. [Releasing](docs/09-releasing.md) — how a release is cut and verified
 
 Also: [runnable examples](examples/) · [API reference](https://pkg.go.dev/github.com/NerdMeNot/catena)

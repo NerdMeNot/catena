@@ -155,7 +155,7 @@ Starts one goroutine per iteration, joined before it returns, so stopping waits 
 :::
 
 :::caution
-Buffers up to n elements and consumes at most one beyond those it holds
+Holds up to n elements in the chunk and runs the source up to another n ahead (64 at most), plus one
 :::
 
 :::caution
@@ -181,10 +181,14 @@ fmt.Println(batches)
 func Merge[T any](seqs ...catena.Seq[T]) catena.Seq[T]
 ```
 
-Merge yields the elements of every sequence as they arrive, each sequence running on a goroutine of its own. Elements of one sequence keep their order; the interleaving between sequences is whatever the timing makes it. It ends when all have ended. Each source runs at most one element ahead.
+Merge yields the elements of every sequence as they arrive, each sequence running on a goroutine of its own. Elements of one sequence keep their order; the interleaving between sequences is whatever the timing makes it. It ends when all have ended.
 
 :::caution
 Starts one goroutine per sequence, plus one, per iteration, all joined before it returns, so stopping waits for every source's current step
+:::
+
+:::caution
+Buffers up to 64 elements between the sources and the consumer, so together they run that far ahead, plus one each
 :::
 
 :::caution
