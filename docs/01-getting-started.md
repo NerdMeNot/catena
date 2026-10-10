@@ -74,9 +74,34 @@ vals, errs := nums.CollectAll() // keep everything, gather all errors
 vals := nums.Ignore().Collect() // skip bad lines, keep going
 ```
 
+To stop at the first error and keep chaining, `UntilErr` is `Collect`'s
+policy as a sequence — check the error once the pipeline has run:
+
+```go
+var err error
+total := nums.UntilErr(&err).Then(catena.Sum)
+```
+
 The full story — including the shipped producers for files, paginated
 APIs and `sql.Rows`, and how to write your own — is in
 [03-error-handling.md](03-error-handling.md).
+
+## When each element is slow
+
+A callback that waits — on a request, a query, a file — can run several
+at a time without the pipeline changing shape. Concurrency is a separate
+import, `catena/parallel`, and a stage goes into the chain with `Then`:
+
+```go
+bodies, err := catena.FromSlice(urls).
+    Filter(isHTTPS).
+    Then(parallel.Map(ctx, 8, fetch)). // eight at a time, results in order
+    Collect()
+```
+
+A failed fetch is an element like any other, so the three policies above
+still apply, and every goroutine has exited by the time `Collect`
+returns. [06-concurrency.md](06-concurrency.md) has the rest.
 
 ## Eager when you want it
 
@@ -102,7 +127,8 @@ choice](02-concepts.md#eager-vs-lazy--the-actual-difference).
    `catena.Distinct(s)`, not `s.Distinct()` — a method on `Seq[T any]` may
    require nothing of `T`, so anything needing `comparable`, `cmp.Ordered`
    or a numeric `T` lives at package level. The chain continues normally
-   afterwards: `catena.Distinct(s).Filter(f)`. If the compiler tells you
+   afterwards — `catena.Distinct(s).Filter(f)` — or stays unbroken with
+   `Then`: `s.Then(catena.Distinct).Filter(f)`. If the compiler tells you
    `Seq[int] has no field or method Distinct`, this is why — the operator
    exists, it is just spelled differently.
 
@@ -131,3 +157,6 @@ Most names are the Kotlin ones. Where your habit differs:
 
 `Filter` and `Map` keep their Kotlin/Rust names rather than LINQ's because
 they match `slices.DeleteFunc` and the rest of Go's own vocabulary.
+
+The full lookup — from `lo`, Kotlin and LINQ — is in
+[08-coming-from.md](08-coming-from.md).
