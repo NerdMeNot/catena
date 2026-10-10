@@ -200,12 +200,19 @@ the site's own machinery — a new archived version, a layout fix — has
 nothing to do with the library and should not wait for one.
 
 `Actions → Docs → Run workflow` takes a ref, and it may be `main`. What
-keeps that honest is a guard in the workflow: the deploy fails unless
-`docs/operators/` at that ref is identical to the latest release tag. That
-directory is generated from the library's doc comments and its verified
-examples, so if it matches, the site describes exactly the API `go get`
-delivers, whatever else has changed. If it does not match, the library has
-moved and the answer is to cut a release rather than publish the branch.
+keeps that honest is a guard in the workflow: the deploy fails unless the
+library's source at that ref is the released one — every non-test Go file
+of the library and the linter, compared against the latest release tag.
+If it matches, the site describes exactly the API `go get` delivers,
+whatever else has changed: guides, examples, tests and the site itself
+can all be published ahead of a release. If it does not match, the
+library has moved, and the answer is to cut a release rather than publish
+the branch.
+
+`version.go` is left out of that comparison, since `main` carries the next
+`-dev` version by design. One thing a site-only publish does not reach is
+pkg.go.dev, which shows each version's examples as they were when it was
+tagged.
 
 ## Versioning policy
 
