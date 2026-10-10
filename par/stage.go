@@ -12,8 +12,8 @@ import (
 // a slow consumer overlap instead of taking turns. Order is preserved.
 // T cannot be inferred — write par.Buffer[int](64). ⚠ Starts one
 // goroutine per iteration, joined before it returns, so stopping waits
-// for the source's current step. Buffers n elements and consumes up to
-// n+1 beyond those yielded. Everything upstream runs concurrently with
+// for the source's current step. ⚠ Buffers n elements and consumes up to
+// n+1 beyond those yielded. ⚠ Everything upstream runs concurrently with
 // the consumer's loop body. Panics if n <= 0.
 func Buffer[T any](n int) func(catena.Seq[T]) catena.Seq[T] {
 	posCheck("Buffer", "n", n)
@@ -37,9 +37,9 @@ func Buffer[T any](n int) func(catena.Seq[T]) catena.Seq[T] {
 // timing makes it. It ends when all have ended. catena.MergeSorted is the
 // unrelated sequential merge of sorted inputs. ⚠ Starts one goroutine per
 // sequence, plus one, per iteration, all joined before it returns, so
-// stopping waits for every source's current step. Each source runs at most
-// one element ahead. The sources run concurrently with each other and
-// with the consumer's loop body.
+// stopping waits for every source's current step. ⚠ The sources run
+// concurrently with each other and with the consumer's loop body. Each
+// source runs at most one element ahead.
 func Merge[T any](seqs ...catena.Seq[T]) catena.Seq[T] {
 	return func(yield func(T) bool) {
 		f := start(0, seqs...)
@@ -60,8 +60,8 @@ func Merge[T any](seqs ...catena.Seq[T]) catena.Seq[T] {
 // a silent source yields nothing. Every chunk is a fresh slice. T cannot
 // be inferred — write par.ChunkedWithin[int](100, time.Second). ⚠ Starts
 // one goroutine per iteration, joined before it returns, so stopping
-// waits for the source's current step. Buffers up to n elements and
-// consumes at most one beyond those it holds. Everything upstream runs
+// waits for the source's current step. ⚠ Buffers up to n elements and
+// consumes at most one beyond those it holds. ⚠ Everything upstream runs
 // concurrently with the consumer's loop body. Panics if n <= 0 or d <= 0.
 func ChunkedWithin[T any](n int, d time.Duration) func(catena.Seq[T]) catena.Seq[[]T] {
 	posCheck("ChunkedWithin", "n", n)

@@ -8,7 +8,7 @@ operator's behavior is predictable from its name and doc comment.
 
 | Type | What it is | Evaluation |
 |---|---|---|
-| `Seq[T]` | `iter.Seq[T]` with 84 methods — 37 chainable, 47 terminal | lazy, possibly infinite |
+| `Seq[T]` | `iter.Seq[T]` with 89 methods — 41 chainable, 48 terminal | lazy, possibly infinite |
 | `Seq2[K, V]` | the stdlib pair currency; a *bridge* back to `Seq` | lazy |
 | `Try[T]` | `iter.Seq2[T, error]` — fallible elements | lazy |
 | `List[T]` | `[]T` with the mirrored operation set | eager |
@@ -22,6 +22,13 @@ no copying.
 `Seq2` is deliberately thin. It has what you need to get back to `Seq`
 (`Keys`, `Values`, `MapTo`) and little else — it is a bridge to the
 standard library's `maps.All`/`slices.All` world, not a second home.
+
+Those four are the whole core package. Three more packages sit beside it,
+each opt-in by import: `catena/par` for the operators that start
+goroutines ([concurrency](06-concurrency.md)), `catena/source` for
+ready-made producers over readers, paginated APIs and SQL rows
+([error handling](03-error-handling.md)), and the separate `catena/lint`
+module ([linting](07-linting.md)).
 
 ## Eager vs lazy — the actual difference
 

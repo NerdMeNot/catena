@@ -7,6 +7,84 @@ All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
 
+## [Unreleased]
+
+The largest release since the API froze: the places a chain had to stop
+are closed, and three packages now sit beside the core. Nothing existing
+changes behaviour.
+
+This reverses three earlier decisions, on purpose. The original design
+ruled out parallel operators ("a different library"), capped the
+operator count, and kept everything in one package. Concurrency is still
+a different *package* — the core starts no goroutine it did not start
+before — but it is no longer someone else's problem.
+
+### Added
+
+- **`Seq.Then`** applies a function to the sequence, so a function that
+  takes one sits inside the chain instead of wrapping it. Every
+  one-argument package function fits, with its types inferred:
+  `s.Then(catena.Distinct).Then(catena.Sorted).Take(10)`. It is also how
+  the stages in `catena/par` attach.
+- **Ordered, chainable grouping.** `Seq.FoldedBy` and `catena.GroupedBy`
+  are `FoldBy` and `GroupBy` that yield a `Seq2` of pairs, keys in the
+  order they were first seen, instead of returning a map: the result is
+  deterministic and the chain keeps going. `GroupedBy` is a package
+  function because `Seq2[K, []T]` leads back to `Seq[[]T]`, the same
+  instantiation cycle that makes `Chunked` one.
+- **Joins that drop nothing.** `Seq.LeftJoinBy` keeps a left element with
+  no match and tells `combine` so; `Seq.GroupJoinBy` yields one result per
+  left element with all of its matches together.
+- **`catena.MergeSorted` and `Seq.MergeSortedWith`** merge inputs that are
+  each already sorted, lazily, holding one element per input — so they
+  work on unbounded streams, where `Chain` followed by `Sorted` cannot.
+- **`catena/par`: concurrency.** Six operators, each a stage for `Then`:
+  - `Map`, `MapUnordered` and `ForEach` run a callback up to `n` at a
+    time. The source stays on the consumer's goroutine; only the callback
+    runs elsewhere. A failed call is a `Try` element, so `Collect`,
+    `CollectAll` and `Ignore` choose the policy as they always have.
+  - `Buffer` reads ahead, `ChunkedWithin` batches by size or by time, and
+    `Merge` interleaves several sequences by arrival; these run their
+    sources on goroutines of their own.
+
+  Every one joins the goroutines it started before its iteration
+  returns — on a normal end, an early break, a cancelled context and a
+  panic alike. That is tested under `testing/synctest`, in virtual time,
+  against callbacks that are deliberately slow to stop.
+- **`catena/source`: producers that ship.** `Lines` for the lines of a
+  reader, of any length; `Paginate` for a paginated API, fetching a page
+  only once the one before it has been yielded in full; and
+  `sqlsource.Rows` for a query, in a package of its own so the others do
+  not link `database/sql`. Each opens its resource inside the iteration
+  and releases it on every exit — the pattern the error-handling guide
+  taught, now code.
+- **`catena/lint`: a linter**, as a separate module so the library's own
+  still depends on nothing. `catenalint` runs as a `go vet` tool and
+  reports the pipelines that are correct but wasteful —
+  `Sorted(s).Take(n)` where `TopN` holds `n` elements,
+  `Sorted(s).First()` where `Min` holds one, `Distinct(Sorted(s))` where
+  `Dedupe` holds none, a `GroupBy` used only to count — and the lazy
+  sequence that is built and never consumed. It offers a fix only where
+  the replacement returns the same values of the same type. It is tagged
+  on its own line, `lint/v0.x`.
+- Guides for [concurrency](/guides/concurrency/) and
+  [linting](/guides/linting/), reference pages for the two new
+  packages, and `concurrency` and `sources` examples.
+
+### Changed
+
+- The 100% coverage gate now covers `par`, `source` and `sqlsource` as
+  well as the core package, and the linter's module is gated to 100%
+  separately. CI also runs the linter over the examples, which must come
+  back clean.
+- The `selection` example's leaderboard sorted every player to show four.
+  The linter found it; it uses `TopNBy` now, with identical output.
+- The `join` example rolls up with `FoldedBy` in place of collecting map
+  keys and sorting them, and shows the two new joins.
+- The operator reference is generated for the sub-packages too, and the
+  README's "exactly one goroutine" is now stated of the core package,
+  which is where it is true.
+
 ## [1.4.0] — 2026-09-01
 
 A performance release with no API change: the terminals that gather a

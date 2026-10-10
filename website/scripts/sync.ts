@@ -74,8 +74,12 @@ function summarize(body: string): string {
  */
 function rewriteLinks(md: string, repoUrl: string): string {
   return md
-    // sibling docs: 02-concepts.md -> /guides/concepts
-    .replace(/\]\((?:\.\.\/docs\/)?(\d\d)-([a-z-]+)\.md(#[^)]*)?\)/g, (_, _n, slug, hash) =>
+    // the operator reference, from a guide: operators/15-concurrency.md -> /operators/concurrency
+    .replace(/\]\(operators\/\d\d-([a-z-]+)\.md(#[^)]*)?\)/g, (_, slug, hash) =>
+      `](/operators/${slug}/${hash ?? ''})`)
+    // guides, from a sibling, an operator page or the changelog:
+    // 02-concepts.md, ../06-concurrency.md, docs/07-linting.md -> /guides/...
+    .replace(/\]\((?:\.\.\/)?(?:docs\/)?(\d\d)-([a-z-]+)\.md(#[^)]*)?\)/g, (_, _n, slug, hash) =>
       `](/guides/${slug}/${hash ?? ''})`)
     // examples: ../examples/01-basics/main.go -> /examples/basics
     .replace(/\]\((?:\.\.\/)?examples\/\d\d-([a-z-]+)(?:\/main\.go)?\)/g, (_, slug) =>

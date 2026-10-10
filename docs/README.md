@@ -12,9 +12,14 @@ Start here, read in roughly this order:
   memory class, drain class, and the notes that matter.
 - **[Performance](05-performance.md)** — what the iterator protocol costs, what
   catena adds (nothing, measured), and when fusion wins outright.
-- **[Releasing](06-releasing.md)** — how a release is cut and verified.
+- **[Concurrency](06-concurrency.md)** — the `par` package: running callbacks
+  and sources concurrently, and the guarantee that nothing outlives the
+  iteration.
+- **[Linting](07-linting.md)** — `catenalint`: the checks for pipelines that
+  are correct but wasteful, and for pipelines that never run.
+- **[Releasing](08-releasing.md)** — how a release is cut and verified.
 
-**[Operator reference](operators/README.md)** — all 183 operators across 14 pages,
+**[Operator reference](operators/README.md)** — all 199 operators across 16 pages,
 each with its signature, its memory and termination behaviour, and a
 worked example that `go test` runs and verifies. Generated from the
 library's own doc comments and its Example functions, so it cannot drift

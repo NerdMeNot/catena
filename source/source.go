@@ -68,8 +68,8 @@ func Lines(open func() (io.ReadCloser, error)) catena.Try[string] {
 // downstream Take(n) fetches no more pages than it needs. A failed fetch
 // is yielded as (zero, err) and ends the sequence, its items ignored: the
 // way forward is not known. Each iteration starts again from first. ⚠
-// Holds one page in memory. A source that always reports another page is
-// infinite.
+// Holds one page in memory. ⚠ A source that always reports another page
+// is infinite.
 func Paginate[T, C any](first C, fetch func(cursor C) (items []T, next C, more bool, err error)) catena.Try[T] {
 	return func(yield func(T, error) bool) {
 		cursor := first
