@@ -14,7 +14,7 @@ import (
 // Map yields f applied to each element.
 func (s Seq[T]) Map[U any](f func(T) U) Seq[U] {
 	return func(yield func(U) bool) {
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			return yield(f(v))
 		})
 	}
@@ -24,7 +24,7 @@ func (s Seq[T]) Map[U any](f func(T) U) Seq[U] {
 func (s Seq[T]) MapIndexed[U any](f func(int, T) U) Seq[U] {
 	return func(yield func(U) bool) {
 		i := 0
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			ok := yield(f(i, v))
 			i++
 			return ok
@@ -36,7 +36,7 @@ func (s Seq[T]) MapIndexed[U any](f func(int, T) U) Seq[U] {
 // a fused Map + Filter.
 func (s Seq[T]) FilterMap[U any](f func(T) (U, bool)) Seq[U] {
 	return func(yield func(U) bool) {
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			u, ok := f(v)
 			return !ok || yield(u)
 		})
@@ -48,8 +48,8 @@ func (s Seq[T]) FlatMap[U any](f func(T) Seq[U]) Seq[U] {
 	return func(yield func(U) bool) {
 		stopped := false
 		fw := forward(yield, &stopped)
-		src(s)(func(v T) bool {
-			src(f(v))(fw)
+		s.each(func(v T) bool {
+			f(v).each(fw)
 			return !stopped
 		})
 	}
@@ -58,7 +58,7 @@ func (s Seq[T]) FlatMap[U any](f func(T) Seq[U]) Seq[U] {
 // FlatMapSlice yields all elements of the slice f(v) for each element v.
 func (s Seq[T]) FlatMapSlice[U any](f func(T) []U) Seq[U] {
 	return func(yield func(U) bool) {
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			for _, u := range f(v) {
 				if !yield(u) {
 					return false
@@ -74,7 +74,7 @@ func (s Seq[T]) FlatMapSlice[U any](f func(T) []U) Seq[U] {
 func (s Seq[T]) Scan[A any](init A, f func(A, T) A) Seq[A] {
 	return func(yield func(A) bool) {
 		acc := init
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			acc = f(acc, v)
 			return yield(acc)
 		})
@@ -85,7 +85,7 @@ func (s Seq[T]) Scan[A any](init A, f func(A, T) A) Seq[A] {
 func (s Seq[T]) WithIndex() Seq2[int, T] {
 	return func(yield func(int, T) bool) {
 		i := 0
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			ok := yield(i, v)
 			i++
 			return ok
@@ -99,7 +99,7 @@ func (s Seq[T]) ZipWithNext() Seq2[T, T] {
 	return func(yield func(T, T) bool) {
 		var prev T
 		have := false
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			ok := !have || yield(prev, v)
 			prev, have = v, true
 			return ok
@@ -118,7 +118,7 @@ func (s Seq[T]) Zip[U any](other Seq[U]) Seq2[T, U] {
 	return func(yield func(T, U) bool) {
 		next, stop := iter.Pull(src(other))
 		defer stop()
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			u, ok := next()
 			return ok && yield(v, u)
 		})
@@ -129,7 +129,7 @@ func (s Seq[T]) Zip[U any](other Seq[U]) Seq2[T, U] {
 // (zero, err).
 func (s Seq[T]) MapErr[U any](f func(T) (U, error)) Try[U] {
 	return func(yield func(U, error) bool) {
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			u, err := f(v)
 			if err != nil {
 				var zero U
@@ -144,7 +144,7 @@ func (s Seq[T]) MapErr[U any](f func(T) (U, error)) Try[U] {
 // yields (zero, err).
 func (s Seq[T]) FilterErr(pred func(T) (bool, error)) Try[T] {
 	return func(yield func(T, error) bool) {
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			ok, err := pred(v)
 			if err != nil {
 				var zero T
@@ -162,7 +162,7 @@ func (s Seq[T]) FilterErr(pred func(T) (bool, error)) Try[T] {
 func (s Seq[T]) DistinctBy[K comparable](sel func(T) K) Seq[T] {
 	return func(yield func(T) bool) {
 		seen := make(map[K]struct{})
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			k := sel(v)
 			if _, dup := seen[k]; dup {
 				return true
@@ -180,7 +180,7 @@ func (s Seq[T]) DedupeBy[K comparable](sel func(T) K) Seq[T] {
 	return func(yield func(T) bool) {
 		var prev K
 		have := false
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			k := sel(v)
 			if have && k == prev {
 				return true
@@ -199,7 +199,7 @@ func (s Seq[T]) DedupeBy[K comparable](sel func(T) K) Seq[T] {
 func (s Seq[T]) DuplicatesBy[K comparable](sel func(T) K) Seq[T] {
 	return func(yield func(T) bool) {
 		reported := make(map[K]bool) // present: seen; true: already yielded
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			k := sel(v)
 			done, seen := reported[k]
 			if !seen {
@@ -222,7 +222,7 @@ func (s Seq[T]) DuplicatesBy[K comparable](sel func(T) K) Seq[T] {
 func (s Seq[T]) IsSortedBy[K cmp.Ordered](sel func(T) K) bool {
 	var prev K
 	have, sorted := false, true
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		k := sel(v)
 		if have && cmp.Compare(prev, k) > 0 {
 			sorted = false
@@ -245,7 +245,7 @@ func sortedByKey[T any, K cmp.Ordered](s Seq[T], sel func(T) K, desc bool) Seq[T
 			k K
 		}
 		var g gatherer[entry]
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			g.add(entry{v, sel(v)})
 			return true
 		})
@@ -293,12 +293,12 @@ func (s Seq[T]) JoinBy[U any, K comparable, R any](
 ) Seq[R] {
 	return func(yield func(R) bool) {
 		right := make(map[K][]U)
-		src(other)(func(u U) bool {
+		other.each(func(u U) bool {
 			k := rightKey(u)
 			right[k] = append(right[k], u)
 			return true
 		})
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			for _, u := range right[leftKey(v)] {
 				if !yield(combine(v, u)) {
 					return false
@@ -322,12 +322,12 @@ func (s Seq[T]) LeftJoinBy[U any, K comparable, R any](
 ) Seq[R] {
 	return func(yield func(R) bool) {
 		right := make(map[K][]U)
-		src(other)(func(u U) bool {
+		other.each(func(u U) bool {
 			k := rightKey(u)
 			right[k] = append(right[k], u)
 			return true
 		})
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			matches := right[leftKey(v)]
 			if len(matches) == 0 {
 				var zero U
@@ -357,12 +357,12 @@ func (s Seq[T]) GroupJoinBy[U any, K comparable, R any](
 ) Seq[R] {
 	return func(yield func(R) bool) {
 		right := make(map[K][]U)
-		src(other)(func(u U) bool {
+		other.each(func(u U) bool {
 			k := rightKey(u)
 			right[k] = append(right[k], u)
 			return true
 		})
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			// Capacity clipped to length, so that appending to one
 			// left element's matches cannot write into another's.
 			us := right[leftKey(v)]

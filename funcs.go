@@ -24,7 +24,7 @@ import (
 func Distinct[T comparable](s Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
 		seen := make(map[T]struct{})
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			if _, dup := seen[v]; dup {
 				return true
 			}
@@ -40,7 +40,7 @@ func Distinct[T comparable](s Seq[T]) Seq[T] {
 func Duplicates[T comparable](s Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
 		reported := make(map[T]bool) // present: seen; true: already yielded
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			done, seen := reported[v]
 			if !seen {
 				reported[v] = false
@@ -61,7 +61,7 @@ func Dedupe[T comparable](s Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
 		var prev T
 		have := false
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			if have && v == prev {
 				return true
 			}
@@ -78,8 +78,8 @@ func Dedupe[T comparable](s Seq[T]) Seq[T] {
 func IsSorted[T cmp.Ordered](s Seq[T]) bool {
 	var prev T
 	have, sorted := false, true
-	src(s)(func(v T) bool {
-		if have && cmp.Compare(prev, v) > 0 {
+	s.each(func(v T) bool {
+		if have && cmp.Less(v, prev) {
 			sorted = false
 			return false
 		}
@@ -105,7 +105,7 @@ func SortedDesc[T cmp.Ordered](s Seq[T]) Seq[T] {
 // to 0. ⚠ Full drain.
 func Sum[T Numeric](s Seq[T]) T {
 	var sum T
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		sum += v
 		return true
 	})
@@ -116,7 +116,7 @@ func Sum[T Numeric](s Seq[T]) T {
 // multiplicative identity. ⚠ Full drain.
 func Product[T Numeric](s Seq[T]) T {
 	prod := T(1)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		prod *= v
 		return true
 	})
@@ -128,7 +128,7 @@ func Product[T Numeric](s Seq[T]) T {
 func Average[T Numeric](s Seq[T]) (float64, bool) {
 	var sum float64
 	n := 0
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		sum += float64(v)
 		n++
 		return true
@@ -144,7 +144,7 @@ func Average[T Numeric](s Seq[T]) (float64, bool) {
 func Max[T cmp.Ordered](s Seq[T]) (T, bool) {
 	var best T
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if !found || cmp.Compare(v, best) > 0 {
 			best, found = v, true
 		}
@@ -158,7 +158,7 @@ func Max[T cmp.Ordered](s Seq[T]) (T, bool) {
 func Min[T cmp.Ordered](s Seq[T]) (T, bool) {
 	var best T
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if !found || cmp.Compare(v, best) < 0 {
 			best, found = v, true
 		}
@@ -170,7 +170,7 @@ func Min[T cmp.Ordered](s Seq[T]) (T, bool) {
 // MinMax returns the smallest and largest elements in one pass. ⚠ Full
 // drain.
 func MinMax[T cmp.Ordered](s Seq[T]) (min, max T, ok bool) {
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if !ok {
 			min, max, ok = v, v, true
 			return true
@@ -203,7 +203,7 @@ func BottomN[T cmp.Ordered](s Seq[T], n int) []T {
 // Contains reports whether v occurs in s; stops at the first match.
 func Contains[T comparable](s Seq[T], v T) bool {
 	found := false
-	src(s)(func(u T) bool {
+	s.each(func(u T) bool {
 		found = u == v
 		return !found
 	})
@@ -213,7 +213,7 @@ func Contains[T comparable](s Seq[T], v T) bool {
 // IndexOf returns the index of the first occurrence of v; -1 if none.
 func IndexOf[T comparable](s Seq[T], v T) int {
 	i, at := 0, -1
-	src(s)(func(u T) bool {
+	s.each(func(u T) bool {
 		if u == v {
 			at = i
 			return false
@@ -228,7 +228,7 @@ func IndexOf[T comparable](s Seq[T], v T) int {
 func NonZero[T comparable](s Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
 		var zero T
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			if v == zero {
 				return true
 			}
@@ -243,7 +243,7 @@ func NonZero[T comparable](s Seq[T]) Seq[T] {
 // grow one. ⚠ Full drain; map iteration order is undefined.
 func ToKeySet[T comparable](s Seq[T]) map[T]struct{} {
 	out := make(map[T]struct{})
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		out[v] = struct{}{}
 		return true
 	})
@@ -254,7 +254,7 @@ func ToKeySet[T comparable](s Seq[T]) map[T]struct{} {
 // undefined.
 func Tally[T comparable](s Seq[T]) map[T]int {
 	out := make(map[T]int)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		out[v]++
 		return true
 	})
@@ -265,7 +265,7 @@ func Tally[T comparable](s Seq[T]) map[T]int {
 // last value wins. ⚠ Full drain; map iteration order is undefined.
 func AssociateWith[T comparable, V any](s Seq[T], f func(T) V) map[T]V {
 	out := make(map[T]V)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		out[v] = f(v)
 		return true
 	})
@@ -280,7 +280,7 @@ func Equal[T comparable](a, b Seq[T]) bool {
 	next, stop := iter.Pull(src(b))
 	defer stop()
 	eq := true
-	src(a)(func(v T) bool {
+	a.each(func(v T) bool {
 		u, ok := next()
 		eq = ok && u == v
 		return eq
@@ -310,9 +310,9 @@ func Union[T comparable](a, b Seq[T]) Seq[T] {
 			}
 			return true
 		}
-		src(a)(emit)
+		a.each(emit)
 		if !stopped {
-			src(b)(emit)
+			b.each(emit)
 		}
 	}
 }
@@ -324,7 +324,7 @@ func Intersect[T comparable](a, b Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
 		inB := ToKeySet(b)
 		seen := make(map[T]struct{})
-		src(a)(func(v T) bool {
+		a.each(func(v T) bool {
 			if _, ok := inB[v]; !ok {
 				return true
 			}
@@ -344,7 +344,7 @@ func Except[T comparable](a, b Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
 		inB := ToKeySet(b)
 		seen := make(map[T]struct{})
-		src(a)(func(v T) bool {
+		a.each(func(v T) bool {
 			if _, ok := inB[v]; ok {
 				return true
 			}
@@ -374,7 +374,7 @@ func Chain[T any](seqs ...Seq[T]) Seq[T] {
 		stopped := false
 		fw := forward(yield, &stopped)
 		for _, s := range seqs {
-			src(s)(fw)
+			s.each(fw)
 			if stopped {
 				return
 			}
@@ -387,7 +387,7 @@ func Chain[T any](seqs ...Seq[T]) Seq[T] {
 func Unzip[K, V any](s Seq2[K, V]) ([]K, []V) {
 	var gk gatherer[K]
 	var gv gatherer[V]
-	src2(s)(func(k K, v V) bool {
+	s.each(func(k K, v V) bool {
 		gk.add(k)
 		gv.add(v)
 		return true
@@ -399,7 +399,7 @@ func Unzip[K, V any](s Seq2[K, V]) ([]K, []V) {
 // value wins. ⚠ Full drain; map iteration order is undefined.
 func CollectMap[K comparable, V any](s Seq2[K, V]) map[K]V {
 	out := make(map[K]V)
-	src2(s)(func(k K, v V) bool {
+	s.each(func(k K, v V) bool {
 		out[k] = v
 		return true
 	})
@@ -411,7 +411,7 @@ func CollectMap[K comparable, V any](s Seq2[K, V]) map[K]V {
 func Join(s Seq[string], sep string) string {
 	var b strings.Builder
 	first := true
-	src(s)(func(v string) bool {
+	s.each(func(v string) bool {
 		if !first {
 			b.WriteString(sep)
 		}

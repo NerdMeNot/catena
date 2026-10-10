@@ -259,3 +259,16 @@ func TestSeq2EarlyTermination(t *testing.T) {
 		mustComplete(t, testTimeout, func() { inf.Keys().Take(3).Drain() })
 	})
 }
+
+func TestNilPairSequencesConvertToEmptyIterators(t *testing.T) {
+	// The conversions hand back a function value, so a nil sequence must
+	// become a callable empty one rather than a nil that panics in range.
+	var pairs catena.Seq2[int, string]
+	for range pairs.Seq2() {
+		t.Fatal("a nil Seq2 yielded")
+	}
+	var fallible catena.Try[int]
+	for range fallible.Seq2() {
+		t.Fatal("a nil Try yielded")
+	}
+}

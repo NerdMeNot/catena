@@ -21,7 +21,7 @@ func (s Seq[T]) MaxBy[K cmp.Ordered](sel func(T) K) (T, bool) {
 	var best T
 	var bestKey K
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if k := sel(v); !found || cmp.Compare(k, bestKey) > 0 {
 			best, bestKey, found = v, k, true
 		}
@@ -37,7 +37,7 @@ func (s Seq[T]) MinBy[K cmp.Ordered](sel func(T) K) (T, bool) {
 	var best T
 	var bestKey K
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if k := sel(v); !found || cmp.Compare(k, bestKey) < 0 {
 			best, bestKey, found = v, k, true
 		}
@@ -51,7 +51,7 @@ func (s Seq[T]) MinBy[K cmp.Ordered](sel func(T) K) (T, bool) {
 func (s Seq[T]) MaxOf[K cmp.Ordered](sel func(T) K) (K, bool) {
 	var best K
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if k := sel(v); !found || cmp.Compare(k, best) > 0 {
 			best, found = k, true
 		}
@@ -65,7 +65,7 @@ func (s Seq[T]) MaxOf[K cmp.Ordered](sel func(T) K) (K, bool) {
 func (s Seq[T]) MinOf[K cmp.Ordered](sel func(T) K) (K, bool) {
 	var best K
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if k := sel(v); !found || cmp.Compare(k, best) < 0 {
 			best, found = k, true
 		}
@@ -77,7 +77,7 @@ func (s Seq[T]) MinOf[K cmp.Ordered](sel func(T) K) (K, bool) {
 // MinMaxOf returns the smallest and largest keys in one pass. ⚠ Full
 // drain.
 func (s Seq[T]) MinMaxOf[K cmp.Ordered](sel func(T) K) (min, max K, ok bool) {
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		k := sel(v)
 		if !ok {
 			min, max, ok = k, k, true
@@ -99,7 +99,7 @@ func (s Seq[T]) MinMaxOf[K cmp.Ordered](sel func(T) K) (min, max K, ok bool) {
 func (s Seq[T]) MaxWith(cmp func(a, b T) int) (T, bool) {
 	var best T
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if !found || cmp(v, best) > 0 {
 			best, found = v, true
 		}
@@ -113,7 +113,7 @@ func (s Seq[T]) MaxWith(cmp func(a, b T) int) (T, bool) {
 func (s Seq[T]) MinWith(cmp func(a, b T) int) (T, bool) {
 	var best T
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if !found || cmp(v, best) < 0 {
 			best, found = v, true
 		}
@@ -183,7 +183,7 @@ func topNBy[T any, K cmp.Ordered](op string, s Seq[T], n int, sel func(T) K, des
 		}
 	}
 	idx := 0
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		e := topEntry[T, K]{v, sel(v), idx}
 		idx++
 		if len(h) < n {
@@ -243,7 +243,7 @@ func (s Seq[T]) BottomNBy[K cmp.Ordered](n int, sel func(T) K) []T {
 // input sums to 0. catena.Sum(s) is the no-selector form. ⚠ Full drain.
 func (s Seq[T]) SumOf[N Numeric](sel func(T) N) N {
 	var sum N
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		sum += sel(v)
 		return true
 	})
@@ -254,7 +254,7 @@ func (s Seq[T]) SumOf[N Numeric](sel func(T) N) N {
 // multiplicative identity. ⚠ Full drain.
 func (s Seq[T]) ProductOf[N Numeric](sel func(T) N) N {
 	prod := N(1)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		prod *= sel(v)
 		return true
 	})
@@ -267,7 +267,7 @@ func (s Seq[T]) ProductOf[N Numeric](sel func(T) N) N {
 func (s Seq[T]) AverageOf[N Numeric](sel func(T) N) (float64, bool) {
 	var sum float64
 	n := 0
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		sum += float64(sel(v))
 		n++
 		return true
@@ -283,7 +283,7 @@ func (s Seq[T]) AverageOf[N Numeric](sel func(T) N) (float64, bool) {
 func (s Seq[T]) JoinToString(sep string, sel func(T) string) string {
 	var b strings.Builder
 	first := true
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if !first {
 			b.WriteString(sep)
 		}
@@ -332,7 +332,7 @@ func (s Seq[T]) Sample(n int, rng *rand.Rand) []T {
 		skip = int(min(math.Floor(math.Log(unit())/math.Log(1-w)), math.MaxInt32))
 	}
 	idx := 0
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		i := idx
 		idx++
 		if len(reservoir) < n {

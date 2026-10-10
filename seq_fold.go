@@ -8,7 +8,7 @@ package catena
 // accumulator; FoldBy folds per key in one streaming pass. ⚠ Full drain.
 func (s Seq[T]) Fold[A any](init A, f func(A, T) A) A {
 	acc := init
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		acc = f(acc, v)
 		return true
 	})
@@ -19,7 +19,7 @@ func (s Seq[T]) Fold[A any](init A, f func(A, T) A) A {
 func (s Seq[T]) FoldIndexed[A any](init A, f func(int, A, T) A) A {
 	acc := init
 	i := 0
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		acc = f(i, acc, v)
 		i++
 		return true
@@ -31,7 +31,7 @@ func (s Seq[T]) FoldIndexed[A any](init A, f func(int, A, T) A) A {
 // call is included in the result.
 func (s Seq[T]) FoldWhile[A any](init A, f func(A, T) (A, bool)) A {
 	acc := init
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		var cont bool
 		acc, cont = f(acc, v)
 		return cont
@@ -44,7 +44,7 @@ func (s Seq[T]) FoldWhile[A any](init A, f func(A, T) (A, bool)) A {
 func (s Seq[T]) FoldErr[A any](init A, f func(A, T) (A, error)) (A, error) {
 	acc := init
 	var err error
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		var next A
 		next, err = f(acc, v)
 		if err != nil {
@@ -64,7 +64,7 @@ func (s Seq[T]) FoldBy[K comparable, A any](
 	key func(T) K, init func(K) A, f func(A, T) A,
 ) map[K]A {
 	out := make(map[K]A)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		k := key(v)
 		acc, ok := out[k]
 		if !ok {
@@ -81,7 +81,7 @@ func (s Seq[T]) FoldBy[K comparable, A any](
 func (s Seq[T]) Reduce(f func(T, T) T) (T, bool) {
 	var acc T
 	have := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if !have {
 			acc, have = v, true
 		} else {
@@ -105,7 +105,7 @@ func (s Seq[T]) FoldedBy[K comparable, A any](
 		index := make(map[K]int)
 		var keys []K
 		var accs []A
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			k := key(v)
 			i, ok := index[k]
 			if !ok {
@@ -129,7 +129,7 @@ func (s Seq[T]) FoldedBy[K comparable, A any](
 // ⚠ Full drain; retains every element; map iteration order is undefined.
 func (s Seq[T]) GroupBy[K comparable](sel func(T) K) map[K][]T {
 	out := make(map[K][]T)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		k := sel(v)
 		out[k] = append(out[k], v)
 		return true
@@ -141,7 +141,7 @@ func (s Seq[T]) GroupBy[K comparable](sel func(T) K) map[K][]T {
 // wins. ⚠ Full drain; map iteration order is undefined.
 func (s Seq[T]) IndexBy[K comparable](sel func(T) K) map[K]T {
 	out := make(map[K]T)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		out[sel(v)] = v
 		return true
 	})
@@ -152,7 +152,7 @@ func (s Seq[T]) IndexBy[K comparable](sel func(T) K) map[K]T {
 // undefined.
 func (s Seq[T]) TallyBy[K comparable](sel func(T) K) map[K]int {
 	out := make(map[K]int)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		out[sel(v)]++
 		return true
 	})
@@ -163,7 +163,7 @@ func (s Seq[T]) TallyBy[K comparable](sel func(T) K) map[K]int {
 // last pair wins. ⚠ Full drain; map iteration order is undefined.
 func (s Seq[T]) Associate[K comparable, V any](f func(T) (K, V)) map[K]V {
 	out := make(map[K]V)
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		k, val := f(v)
 		out[k] = val
 		return true
@@ -175,7 +175,7 @@ func (s Seq[T]) Associate[K comparable, V any](f func(T) (K, V)) map[K]V {
 // sides; nil slices for empty sides. ⚠ Full drain.
 func (s Seq[T]) Partition(pred func(T) bool) (yes, no []T) {
 	var gy, gn gatherer[T]
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if pred(v) {
 			gy.add(v)
 		} else {

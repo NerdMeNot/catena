@@ -14,7 +14,7 @@ import (
 // through.
 func (t Try[T]) Map[U any](f func(T) U) Try[U] {
 	return func(yield func(U, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			var u U
 			if err == nil {
 				u = f(v)
@@ -28,7 +28,7 @@ func (t Try[T]) Map[U any](f func(T) U) Try[U] {
 // (zero, err); errored elements pass through.
 func (t Try[T]) MapErr[U any](f func(T) (U, error)) Try[U] {
 	return func(yield func(U, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			var u U
 			if err == nil {
 				u, err = f(v)
@@ -47,12 +47,12 @@ func (t Try[T]) MapErr[U any](f func(T) (U, error)) Try[U] {
 func (t Try[T]) FlatMap[U any](f func(T) Try[U]) Try[U] {
 	return func(yield func(U, error) bool) {
 		stopped := false
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err != nil {
 				var zero U
 				return yield(zero, err)
 			}
-			srcTry(f(v))(func(u U, uerr error) bool {
+			f(v).each(func(u U, uerr error) bool {
 				if !yield(u, uerr) {
 					stopped = true
 					return false
@@ -68,7 +68,7 @@ func (t Try[T]) FlatMap[U any](f func(T) Try[U]) Try[U] {
 // through unexamined.
 func (t Try[T]) Filter(pred func(T) bool) Try[T] {
 	return func(yield func(T, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err == nil && !pred(v) {
 				return true
 			}
@@ -81,7 +81,7 @@ func (t Try[T]) Filter(pred func(T) bool) Try[T] {
 // yields (zero, err); errored elements pass through unexamined.
 func (t Try[T]) FilterErr(pred func(T) (bool, error)) Try[T] {
 	return func(yield func(T, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err == nil {
 				ok, perr := pred(v)
 				if perr != nil {
@@ -106,7 +106,7 @@ func (t Try[T]) Take(n int) Try[T] {
 			return
 		}
 		left := n
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if !yield(v, err) {
 				return false
 			}
@@ -120,7 +120,7 @@ func (t Try[T]) Take(n int) Try[T] {
 // errored elements pass through and do not terminate (R3).
 func (t Try[T]) TakeWhile(pred func(T) bool) Try[T] {
 	return func(yield func(T, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err == nil && !pred(v) {
 				return false
 			}
@@ -135,7 +135,7 @@ func (t Try[T]) Drop(n int) Try[T] {
 	negCheck("Drop", n)
 	return func(yield func(T, error) bool) {
 		left := n
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if left > 0 {
 				left--
 				return true
@@ -149,7 +149,7 @@ func (t Try[T]) Drop(n int) Try[T] {
 // through.
 func (t Try[T]) OnEach(f func(T)) Try[T] {
 	return func(yield func(T, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err == nil {
 				f(v)
 			}
@@ -162,7 +162,7 @@ func (t Try[T]) OnEach(f func(T)) Try[T] {
 // logging hook.
 func (t Try[T]) OnError(f func(error)) Try[T] {
 	return func(yield func(T, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err != nil {
 				f(err)
 			}
@@ -175,7 +175,7 @@ func (t Try[T]) OnError(f func(error)) Try[T] {
 // (v, nil); reporting false passes the error through unchanged.
 func (t Try[T]) Recover(f func(error) (T, bool)) Try[T] {
 	return func(yield func(T, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err != nil {
 				if r, ok := f(err); ok {
 					v, err = r, nil
@@ -191,7 +191,7 @@ func (t Try[T]) Recover(f func(error) (T, bool)) Try[T] {
 // error is never converted into a zero-value success.
 func (t Try[T]) WrapErr(f func(error) error) Try[T] {
 	return func(yield func(T, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err != nil {
 				if w := f(err); w != nil {
 					err = w
@@ -206,7 +206,7 @@ func (t Try[T]) WrapErr(f func(error) error) Try[T] {
 // (zero, ctx.Err()) and stops.
 func (t Try[T]) UntilDone(ctx context.Context) Try[T] {
 	return func(yield func(T, error) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if cerr := ctx.Err(); cerr != nil {
 				var zero T
 				yield(zero, cerr)
@@ -223,7 +223,7 @@ func (t Try[T]) UntilDone(ctx context.Context) Try[T] {
 func (t Try[T]) Collect() ([]T, error) {
 	var g gatherer[T]
 	var ferr error
-	srcTry(t)(func(v T, err error) bool {
+	t.each(func(v T, err error) bool {
 		if err != nil {
 			ferr = err
 			return false
@@ -240,7 +240,7 @@ func (t Try[T]) Collect() ([]T, error) {
 func (t Try[T]) CollectAll() ([]T, []error) {
 	var gv gatherer[T]
 	var ge gatherer[error]
-	srcTry(t)(func(v T, err error) bool {
+	t.each(func(v T, err error) bool {
 		if err != nil {
 			ge.add(err)
 		} else {
@@ -256,7 +256,7 @@ func (t Try[T]) CollectAll() ([]T, []error) {
 func (t Try[T]) Fold[A any](init A, f func(A, T) A) (A, error) {
 	acc := init
 	var ferr error
-	srcTry(t)(func(v T, err error) bool {
+	t.each(func(v T, err error) bool {
 		if err != nil {
 			ferr = err
 			return false
@@ -271,7 +271,7 @@ func (t Try[T]) Fold[A any](init A, f func(A, T) A) (A, error) {
 // the first of an element error or a non-nil f return (R5).
 func (t Try[T]) ForEach(f func(T) error) error {
 	var ferr error
-	srcTry(t)(func(v T, err error) bool {
+	t.each(func(v T, err error) bool {
 		if err != nil {
 			ferr = err
 			return false
@@ -285,7 +285,7 @@ func (t Try[T]) ForEach(f func(T) error) error {
 // Ignore yields the successful elements, dropping errored ones.
 func (t Try[T]) Ignore() Seq[T] {
 	return func(yield func(T) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			return err != nil || yield(v)
 		})
 	}
@@ -296,7 +296,7 @@ func (t Try[T]) Ignore() Seq[T] {
 // consume; use CollectAll.
 func (t Try[T]) Errs() Seq[error] {
 	return func(yield func(error) bool) {
-		srcTry(t)(func(_ T, err error) bool {
+		t.each(func(_ T, err error) bool {
 			return err == nil || yield(err)
 		})
 	}
@@ -306,7 +306,7 @@ func (t Try[T]) Errs() Seq[error] {
 // the first error — recover() receives the error itself.
 func (t Try[T]) Must() Seq[T] {
 	return func(yield func(T) bool) {
-		srcTry(t)(func(v T, err error) bool {
+		t.each(func(v T, err error) bool {
 			if err != nil {
 				panic(err)
 			}
@@ -319,7 +319,7 @@ func (t Try[T]) Must() Seq[T] {
 // (R5).
 func (t Try[T]) Err() error {
 	var ferr error
-	srcTry(t)(func(_ T, err error) bool {
+	t.each(func(_ T, err error) bool {
 		ferr = err
 		return err == nil
 	})
@@ -331,7 +331,7 @@ func (t Try[T]) Err() error {
 func (t Try[T]) Count() (int, error) {
 	n := 0
 	var ferr error
-	srcTry(t)(func(_ T, err error) bool {
+	t.each(func(_ T, err error) bool {
 		if err != nil {
 			ferr = err
 			return false
