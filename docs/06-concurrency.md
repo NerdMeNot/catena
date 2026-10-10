@@ -33,6 +33,24 @@ The core package never starts a goroutine on your behalf — `ToChan` is
 the one exception, and it says so. Everything that does lives here, so
 that importing `parallel` is the moment you opt in.
 
+## What people use it for
+
+If a loop spends its time waiting, or has more cores than it uses, one of
+these is probably it. Each links to a complete, runnable example.
+
+| You want to | Reach for |
+|---|---|
+| Call an API for every item — enrich orders with their customer, resolve a list of ids | [`Map`](operators/15-concurrency.md#map) |
+| Check a list of links, hosts or certificates, and keep going past the ones that fail | [`Map` with `CollectAll`](operators/15-concurrency.md#keep-going-past-failures) |
+| Hash, resize, transcode or parse every file, on every core | [`Map`](operators/15-concurrency.md#cpu-work) |
+| Ask several replicas or mirrors and use the first to answer | [`MapUnordered` with `First`](operators/15-concurrency.md#mapunordered) |
+| Send webhooks, notifications or cache purges, and stop at the first failure | [`ForEach`](operators/15-concurrency.md#foreach) |
+| Load the three unrelated things a page needs, at once | [`ForEach` over functions](operators/15-concurrency.md#different-calls) |
+| Bulk-insert a live stream without holding rows back for a full batch | [`ChunkedWithin`](operators/15-concurrency.md#chunkedwithin) |
+| Keep reading while the consumer is busy — decode while uploading, parse while compressing | [`Buffer`](operators/15-concurrency.md#buffer) |
+| Combine several feeds — shards, services, partitions — into one stream | [`Merge`](operators/15-concurrency.md#merge) |
+| Walk a paginated API and fetch the details of each item concurrently | `source.Paginate`, `UntilErr`, then `Map` — [below](#errors-and-cancellation) |
+
 ## When it is worth it
 
 A stage hands every element to a pool of goroutines. With a callback that

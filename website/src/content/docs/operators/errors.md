@@ -32,6 +32,34 @@ fmt.Println(errs)
 [order A-101: bad amount "pending"]
 ```
 
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
+
 ## MapErr
 
 ```go
@@ -116,6 +144,34 @@ fmt.Println(errs)
 [order A-101: bad amount "pending"]
 ```
 
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
+
 ## FilterErr
 
 ```go
@@ -146,6 +202,34 @@ fmt.Println(errs)
 [order A-101: bad amount "pending" order A-103: no payment record]
 ```
 
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
+
 ## Take
 
 ```go
@@ -168,6 +252,34 @@ fmt.Println(firstTwoGood)
 [{A-100 2500}] [order A-101: bad amount "pending"]
 [{A-100 2500} {A-102 1200}]
 ```
+
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
 
 ## TakeWhile
 
@@ -233,6 +345,34 @@ fmt.Println(importedCents, len(errs))
 4500 1
 ```
 
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
+
 ## OnError
 
 ```go
@@ -256,6 +396,34 @@ fmt.Println(len(orders), "orders imported")
 skipped: order A-101: bad amount "pending"
 3 orders imported
 ```
+
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
 
 ## Recover
 
@@ -340,6 +508,34 @@ fmt.Println(len(saved), err)
 1 context canceled
 ```
 
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
+
 ## Collect
 
 ```go
@@ -388,6 +584,34 @@ for _, err := range errs {
 imported 3, rejected 1
 rejected: order A-101: bad amount "pending"
 ```
+
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
 
 ## Ignore
 
@@ -459,6 +683,34 @@ import stopped: order A-101: bad amount "pending"
 revenue so far: 2500
 ```
 
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
+
 ## Fold
 
 ```go
@@ -480,6 +732,34 @@ fmt.Println(cents, err)
 ```
 2500 order A-101: bad amount "pending"
 ```
+
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
 
 ## ForEach
 
@@ -504,6 +784,34 @@ fmt.Println("stopped:", err)
 saved A-100
 stopped: order A-101: bad amount "pending"
 ```
+
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
 
 ## Err
 
@@ -547,6 +855,34 @@ fmt.Println(importedOrders().Ignore().Count())
 1 order A-101: bad amount "pending"
 3
 ```
+
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
 
 ## Must
 
@@ -593,6 +929,34 @@ fmt.Println(err, ok)
 {A-100 2500} <nil> true
 order A-101: bad amount "pending" true
 ```
+
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+```
+
+</details>
 
 ## Seq2
 
