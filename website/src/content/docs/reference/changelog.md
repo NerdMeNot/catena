@@ -7,6 +7,34 @@ All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
 
+## [Unreleased]
+
+Documentation only — no change to the library's API or behaviour.
+
+### Documentation
+
+- **The examples are real work now.** Every operator's example — the code
+  the reference pages and pkg.go.dev show — is rewritten around a
+  situation a reader will recognise: unpaid orders, access logs, config
+  ports, CSV imports, health checks. They were mostly `catena.Of(1, 2, 3)`.
+  All are still verified by `go test`.
+- **The `parallel` examples make real requests.** They run against an
+  HTTP server started for the tests, so the calls being run concurrently
+  are genuine: loading the products for a page, racing three mirrors and
+  taking the first to answer, purging a cache across edge nodes, batching
+  click events for a bulk insert.
+- The `concurrency` example program is a nightly job that prepares
+  shipments with two service calls per order, against a local HTTP
+  server, including the case of running three different calls at once.
+- The landing page, the README and the getting-started guide open with
+  what the library replaces — the grouping loop, the worker pool, the
+  error plumbing — and the landing page now covers `parallel`, `source`
+  and the linter, which it predated. Two stale claims on it are
+  corrected: that there are no goroutines anywhere, and a memory figure
+  from before 1.4.
+- The guides point out that a method expression such as `Order.Country`
+  is already a callback, which a test now pins down.
+
 ## [1.5.0] — 2026-10-10
 
 The largest release since the API froze: the places a chain had to stop

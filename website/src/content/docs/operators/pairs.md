@@ -16,13 +16,15 @@ func (s Seq2[K, V]) Filter(pred func(K, V) bool) Seq2[K, V]
 Filter yields the pairs pred admits.
 
 ```go
-pairs := catena.Of(1, 2, 3, 4).WithIndex().
-	Filter(func(i, v int) bool { return v%2 == 0 })
-fmt.Println(pairs.Values().Collect())
+// The predicate sees both sides of the pair: pick hosts by their
+// measured latency.
+latencies := catena.Of("api-1", "api-2", "db-1").Zip(catena.Of(42, 310, 275))
+slow := latencies.Filter(func(host string, ms int) bool { return ms > 200 })
+fmt.Println(slow.Keys().Collect())
 ```
 
 ```
-[2 4]
+[api-2 db-1]
 ```
 
 ## FilterNot
@@ -34,13 +36,16 @@ func (s Seq2[K, V]) FilterNot(pred func(K, V) bool) Seq2[K, V]
 FilterNot yields the pairs pred rejects.
 
 ```go
-pairs := catena.Of(1, 2, 3).WithIndex().
-	FilterNot(func(i, v int) bool { return v == 2 })
-fmt.Println(pairs.Values().Collect())
+// Drop the comment lines of a config file while every surviving line
+// keeps its original number, ready for an error message.
+lines := catena.Of("# cache", "ttl=60", "# auth", "realm=prod").WithIndex().
+	FilterNot(func(_ int, line string) bool { return strings.HasPrefix(line, "#") })
+lines.ForEach(func(i int, line string) { fmt.Printf("line %d: %s\n", i+1, line) })
 ```
 
 ```
-[1 3]
+line 2: ttl=60
+line 4: realm=prod
 ```
 
 ## Map
@@ -52,13 +57,15 @@ func (s Seq2[K, V]) Map[K2, V2 any](f func(K, V) (K2, V2)) Seq2[K2, V2]
 Map yields f applied to each pair.
 
 ```go
-pairs := catena.Of("a", "b").WithIndex().
-	Map(func(i int, s string) (string, int) { return s, i * 10 })
-fmt.Println(catena.CollectMap(pairs))
+// Both sides can change, types included: a ranked list becomes a
+// name-to-place lookup.
+finishers := catena.Of("ada", "grace", "linus").WithIndex()
+places := finishers.Map(func(i int, name string) (string, int) { return name, i + 1 })
+fmt.Println(catena.CollectMap(places))
 ```
 
 ```
-map[a:0 b:10]
+map[ada:1 grace:2 linus:3]
 ```
 
 ## MapValues
@@ -70,14 +77,22 @@ func (s Seq2[K, V]) MapValues[V2 any](f func(K, V) V2) Seq2[K, V2]
 MapValues yields each pair with its value replaced by f(k, v). f receives the key too (Kotlin-consistent).
 
 ```go
-// The callback receives the key as well as the value.
-pairs := catena.Of("a", "b").WithIndex().
-	MapValues(func(i int, s string) string { return fmt.Sprintf("%d%s", i, s) })
-fmt.Println(pairs.Values().Collect())
+// Keys stay put and values are rewritten. The callback receives the
+// key as well, so the new value can depend on it — here, which items
+// are on sale.
+onSale := map[string]bool{"mug": true}
+prices := catena.Of("mug", "tee").Zip(catena.Of(1200, 2500)).
+	MapValues(func(sku string, cents int) int {
+		if onSale[sku] {
+			return cents / 2
+		}
+		return cents
+	})
+fmt.Println(catena.CollectMap(prices))
 ```
 
 ```
-[0a 1b]
+map[mug:600 tee:2500]
 ```
 
 ## MapTo
@@ -91,13 +106,13 @@ MapTo collapses each pair into one value — the intended exit back to Seq and i
 ```go
 // The intended exit: collapse each pair into one value and continue
 // in Seq, where the full API lives.
-fmt.Println(catena.Of("a", "b").WithIndex().
-	MapTo(func(i int, s string) string { return fmt.Sprintf("%d%s", i, s) }).
-	Collect())
+hosts := catena.Of("api.internal", "db.internal")
+addrs := hosts.Zip(catena.Of("443", "5432")).MapTo(net.JoinHostPort)
+fmt.Println(addrs.Collect())
 ```
 
 ```
-[0a 1b]
+[api.internal:443 db.internal:5432]
 ```
 
 ## Take
@@ -109,11 +124,18 @@ func (s Seq2[K, V]) Take(n int) Seq2[K, V]
 Take yields at most the first n pairs. Panics if n is negative.
 
 ```go
-fmt.Println(catena.Range(1, 9, 1).WithIndex().Take(3).Values().Collect())
+// The podium: the first three finishers, each still paired with its
+// position.
+finishers := catena.Of("ada", "grace", "linus", "ken", "dennis").WithIndex()
+finishers.Take(3).ForEach(func(i int, name string) {
+	fmt.Printf("%d. %s\n", i+1, name)
+})
 ```
 
 ```
-[1 2 3]
+1. ada
+2. grace
+3. linus
 ```
 
 ## Drop
@@ -125,11 +147,15 @@ func (s Seq2[K, V]) Drop(n int) Seq2[K, V]
 Drop skips the first n pairs. Panics if n is negative.
 
 ```go
-fmt.Println(catena.Range(1, 5, 1).WithIndex().Drop(2).Values().Collect())
+// Skip a CSV header after numbering the lines, so the data rows keep
+// the line numbers a user would see in their editor.
+rows := catena.Of("sku,qty", "mug,4", "tee,9").WithIndex().Drop(1)
+rows.ForEach(func(i int, row string) { fmt.Printf("line %d: %s\n", i+1, row) })
 ```
 
 ```
-[3 4]
+line 2: mug,4
+line 3: tee,9
 ```
 
 ## Keys
@@ -141,13 +167,15 @@ func (s Seq2[K, V]) Keys() Seq[K]
 Keys yields the first element of each pair. Calling Keys and Values on the same single-pass Seq2 is a double consume — use Unzip.
 
 ```go
-// Keys and Values on the SAME single-pass Seq2 is a double consume;
-// Unzip does both in one pass.
-fmt.Println(catena.Of("a", "b").WithIndex().Keys().Collect())
+// The settings a config map defines, in a stable order. Keys and
+// Values on the SAME single-pass Seq2 is a double consume; Unzip does
+// both in one pass.
+config := map[string]string{"port": "8080", "host": "localhost", "debug": "true"}
+fmt.Println(catena.FromMap(config).Keys().Then(catena.Sorted).Collect())
 ```
 
 ```
-[0 1]
+[debug host port]
 ```
 
 ## Values
@@ -159,11 +187,14 @@ func (s Seq2[K, V]) Values() Seq[V]
 Values yields the second element of each pair.
 
 ```go
-fmt.Println(catena.Of("a", "b").WithIndex().Values().Collect())
+// Leave the keys behind once only the values matter: total units in
+// stock, whatever the SKU.
+stock := map[string]int{"mug": 4, "tee": 9, "cap": 0}
+fmt.Println(catena.FromMap(stock).Values().Then(catena.Sum))
 ```
 
 ```
-[a b]
+13
 ```
 
 ## Swap
@@ -175,12 +206,14 @@ func (s Seq2[K, V]) Swap() Seq2[V, K]
 Swap yields each pair with its sides exchanged.
 
 ```go
-pairs := catena.Of("a", "b").WithIndex().Swap()
-fmt.Println(pairs.Keys().Collect())
+// Invert a lookup table: from code-to-name to name-to-code.
+names := map[int]string{200: "OK", 404: "Not Found"}
+codes := catena.CollectMap(catena.FromMap(names).Swap())
+fmt.Println(codes["Not Found"], codes)
 ```
 
 ```
-[a b]
+404 map[Not Found:404 OK:200]
 ```
 
 ## Fold
@@ -196,13 +229,14 @@ Full drain
 :::
 
 ```go
-total := catena.Of(10, 20, 30).WithIndex().
-	Fold(0, func(acc, i, v int) int { return acc + i*v })
+// A cart total: each pair is a quantity and a unit price in cents.
+cart := catena.Of(2, 1, 3).Zip(catena.Of(1200, 2500, 400))
+total := cart.Fold(0, func(sum, qty, cents int) int { return sum + qty*cents })
 fmt.Println(total)
 ```
 
 ```
-80
+6100
 ```
 
 ## ForEach
@@ -218,13 +252,16 @@ Full drain
 :::
 
 ```go
-catena.Of("a", "b").WithIndex().ForEach(func(i int, s string) {
-	fmt.Printf("%d=%s ", i, s)
+// Both sides arrive as separate arguments — no pair type to unpack.
+env := catena.Of("HOST", "PORT").Zip(catena.Of("localhost", "8080"))
+env.ForEach(func(name, value string) {
+	fmt.Printf("%s=%s\n", name, value)
 })
 ```
 
 ```
-0=a 1=b
+HOST=localhost
+PORT=8080
 ```
 
 ## Any
@@ -236,7 +273,9 @@ func (s Seq2[K, V]) Any(pred func(K, V) bool) bool
 Any reports whether pred admits any pair; stops at the first match.
 
 ```go
-fmt.Println(catena.Of(1, 2).WithIndex().Any(func(i, v int) bool { return v == 2 }))
+// Is anything out of stock? Stops at the first pair that says yes.
+stock := map[string]int{"mug": 4, "tee": 9, "cap": 0}
+fmt.Println(catena.FromMap(stock).Any(func(_ string, units int) bool { return units == 0 }))
 ```
 
 ```
@@ -252,11 +291,15 @@ func (s Seq2[K, V]) All(pred func(K, V) bool) bool
 All reports whether pred admits every pair; stops at the first counterexample. Vacuously true on empty input.
 
 ```go
-fmt.Println(catena.Of(2, 4).WithIndex().All(func(i, v int) bool { return v%2 == 0 }))
+// Is every required setting filled in? Stops at the first one that is
+// not.
+settings := map[string]string{"host": "localhost", "port": "8080", "token": ""}
+complete := catena.FromMap(settings).All(func(_, value string) bool { return value != "" })
+fmt.Println(complete)
 ```
 
 ```
-true
+false
 ```
 
 ## Count
@@ -272,11 +315,14 @@ Full drain
 :::
 
 ```go
-fmt.Println(catena.Of("a", "b", "c").WithIndex().Count())
+// How many SKUs are running low.
+stock := map[string]int{"mug": 4, "tee": 9, "cap": 0}
+low := catena.FromMap(stock).Filter(func(_ string, units int) bool { return units < 5 })
+fmt.Println(low.Count())
 ```
 
 ```
-3
+2
 ```
 
 ## First
@@ -288,12 +334,15 @@ func (s Seq2[K, V]) First() (K, V, bool)
 First returns the first pair.
 
 ```go
-i, v, ok := catena.Of("a", "b").WithIndex().First()
-fmt.Println(i, v, ok)
+// The first item that cannot be fulfilled, with the comma-ok form for
+// when there is none. Nothing after it is examined.
+stock := catena.Of("mug", "cap", "tee").Zip(catena.Of(4, 0, 0))
+sku, units, ok := stock.Filter(func(_ string, units int) bool { return units == 0 }).First()
+fmt.Println(sku, units, ok)
 ```
 
 ```
-0 a true
+cap 0 true
 ```
 
 ## Pull
@@ -305,14 +354,17 @@ func (s Seq2[K, V]) Pull() (next func() (K, V, bool), stop func())
 Pull converts s to a pull-based iterator. THE CALLER MUST CALL stop, even if next has returned false, or resources held by s will leak.
 
 ```go
-next, stop := catena.Of("a", "b").WithIndex().Pull()
+// When the consumer has to drive: take one pair now and the rest
+// later. Ownership transfers to you: always call stop.
+fields := catena.Of("id", "email").Zip(catena.Of("42", "ada@example.com"))
+next, stop := fields.Pull()
 defer stop()
-i, v, ok := next()
-fmt.Println(i, v, ok)
+column, value, ok := next()
+fmt.Println(column, value, ok)
 ```
 
 ```
-0 a true
+id 42 true
 ```
 
 ## Seq2
@@ -324,13 +376,16 @@ func (s Seq2[K, V]) Seq2() iter.Seq2[K, V]
 Seq2 converts to the stdlib iterator type. Free.
 
 ```go
-for i, v := range catena.Of("a", "b").WithIndex().Seq2() {
-	fmt.Printf("%d=%s ", i, v)
-}
+// The standard iterator type, for the stdlib functions that take one —
+// here maps.Insert, layering overrides onto defaults.
+config := map[string]string{"host": "localhost", "port": "8080"}
+overrides := catena.Of("port", "debug").Zip(catena.Of("9090", "true"))
+maps.Insert(config, overrides.Seq2())
+fmt.Println(config)
 ```
 
 ```
-0=a 1=b
+map[debug:true host:localhost port:9090]
 ```
 
 ## CollectMap
@@ -346,13 +401,15 @@ Full drain; map iteration order is undefined
 :::
 
 ```go
-// To a map. On a duplicate key the last value wins, as with plain
-// map assignment.
-fmt.Println(catena.CollectMap(catena.Of("a", "b").WithIndex()))
+// To a map. On a duplicate key the last value wins, as with plain map
+// assignment — so a later setting overrides an earlier one.
+names := catena.Of("port", "host", "port")
+settings := catena.CollectMap(names.Zip(catena.Of("8080", "localhost", "9090")))
+fmt.Println(settings)
 ```
 
 ```
-map[0:a 1:b]
+map[host:localhost port:9090]
 ```
 
 ## Unzip
@@ -369,11 +426,14 @@ Full drain; buffers both sides
 
 ```go
 // Both sides in one pass — the safe way to get keys and values from
-// a single-use Seq2.
-idx, vals := catena.Unzip(catena.Of("a", "b").WithIndex())
-fmt.Println(idx, vals)
+// a single-use Seq2. Here: which log lines failed, and what they said.
+log := catena.Of("ok boot", "ERROR disk full", "ok sync", "ERROR timeout")
+failures := log.WithIndex().
+	Filter(func(_ int, line string) bool { return strings.HasPrefix(line, "ERROR") })
+lineNumbers, messages := catena.Unzip(failures)
+fmt.Println(lineNumbers, messages)
 ```
 
 ```
-[0 1] [a b]
+[1 3] [ERROR disk full ERROR timeout]
 ```

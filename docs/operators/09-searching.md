@@ -11,13 +11,16 @@ func (s Seq[T]) First() (T, bool)
 First returns the first element.
 
 ```go
-v, ok := catena.Of(3, 1).First()
-_, empty := catena.Empty[int]().First()
-fmt.Println(v, ok, empty)
+// The bool tells an empty sequence apart from a first element that
+// happens to be the zero value.
+queue := catena.Of("deploy api", "rotate keys")
+job, ok := queue.First()
+_, idle := catena.Empty[string]().First()
+fmt.Println(job, ok, idle)
 ```
 
 ```
-3 true false
+deploy api true false
 ```
 
 ## FirstOr
@@ -52,12 +55,14 @@ Full drain
 :::
 
 ```go
-v, ok := catena.Of(3, 1).Last()
-fmt.Println(v, ok)
+// The most recent of a series of health checks.
+checks := catena.Of(200, 200, 503)
+latest, ok := checks.Last()
+fmt.Println(latest, ok)
 ```
 
 ```
-1 true
+503 true
 ```
 
 ## LastOr
@@ -90,15 +95,22 @@ func (s Seq[T]) Single() (T, bool)
 Single returns the element iff the sequence has exactly one; it stops consuming upon seeing a second.
 
 ```go
-// True only for exactly one element; it stops as soon as a second
-// arrives rather than counting the rest.
-a, ok1 := catena.Of(7).Single()
-_, ok2 := catena.Of(7, 8).Single()
-fmt.Println(a, ok1, ok2)
+// True only for exactly one element — the check for "there must be
+// one primary". It stops as soon as a second arrives rather than
+// counting the rest.
+type node struct{ Name, Role string }
+isPrimary := func(n node) bool { return n.Role == "primary" }
+
+healthy := catena.Of(node{"db-1", "primary"}, node{"db-2", "replica"})
+splitBrain := catena.Of(node{"db-1", "primary"}, node{"db-2", "primary"})
+
+primary, ok := healthy.Filter(isPrimary).Single()
+_, unambiguous := splitBrain.Filter(isPrimary).Single()
+fmt.Println(primary.Name, ok, unambiguous)
 ```
 
 ```
-7 true false
+db-1 true false
 ```
 
 ## ElementAt
@@ -110,13 +122,16 @@ func (s Seq[T]) ElementAt(i int) (T, bool)
 ElementAt returns the element at index i; (zero, false) for a negative or out-of-range index.
 
 ```go
-v, ok := catena.Of("a", "b", "c").ElementAt(1)
-_, neg := catena.Of("a").ElementAt(-1)
-fmt.Println(v, ok, neg)
+// Zero-based. An index out of range, or negative, reports false
+// rather than panicking — there is no counting from the end.
+leaderboard := catena.Of("mira", "tom", "ada")
+runnerUp, ok := leaderboard.ElementAt(1)
+_, fromEnd := leaderboard.ElementAt(-1)
+fmt.Println(runnerUp, ok, fromEnd)
 ```
 
 ```
-b true false
+tom true false
 ```
 
 ## Find
@@ -128,12 +143,19 @@ func (s Seq[T]) Find(pred func(T) bool) (T, bool)
 Find returns the first element pred admits.
 
 ```go
-v, ok := catena.Of(1, 4, 9).Find(func(n int) bool { return n > 3 })
-fmt.Println(v, ok)
+// The first request that broke the 500ms budget; nothing after it is
+// examined.
+type request struct {
+	Path string
+	Ms   int
+}
+requests := catena.Of(request{"/home", 80}, request{"/search", 740}, request{"/export", 2100})
+slow, ok := requests.Find(func(r request) bool { return r.Ms > 500 })
+fmt.Println(slow.Path, ok)
 ```
 
 ```
-4 true
+/search true
 ```
 
 ## FindLast
@@ -149,12 +171,18 @@ Full drain
 :::
 
 ```go
-v, ok := catena.Of(1, 4, 9).FindLast(func(n int) bool { return n > 3 })
-fmt.Println(v, ok)
+// The most recent release that passed — the one to roll back to.
+type deploy struct {
+	Version string
+	Healthy bool
+}
+history := catena.Of(deploy{"v41", true}, deploy{"v42", true}, deploy{"v43", false})
+good, ok := history.FindLast(func(d deploy) bool { return d.Healthy })
+fmt.Println(good.Version, ok)
 ```
 
 ```
-9 true
+v42 true
 ```
 
 ## FindIndex
@@ -166,12 +194,17 @@ func (s Seq[T]) FindIndex(pred func(T) bool) int
 FindIndex returns the index of the first element pred admits; -1 if none.
 
 ```go
-fmt.Println(catena.Of("a", "b").FindIndex(func(s string) bool { return s == "b" }))
-fmt.Println(catena.Of("a").FindIndex(func(s string) bool { return s == "z" }))
+// Where the first match is, counted from zero; -1 when there is none.
+log := catena.Of("INFO boot", "INFO listening on :8080", "ERROR disk full")
+hasLevel := func(level string) func(string) bool {
+	return func(line string) bool { return strings.HasPrefix(line, level) }
+}
+fmt.Println(log.FindIndex(hasLevel("ERROR")))
+fmt.Println(log.FindIndex(hasLevel("FATAL")))
 ```
 
 ```
-1
+2
 -1
 ```
 
@@ -184,17 +217,22 @@ func (s Seq[T]) FindMap[U any](f func(T) (U, bool)) (U, bool)
 FindMap returns the first mapped value f reports true for — a fused Find + Map.
 
 ```go
-// Fused find and map: the mapped value is returned, not the element.
-v, ok := catena.Of("x", "12", "y").FindMap(func(s string) (int, bool) {
-	n := 0
-	_, err := fmt.Sscanf(s, "%d", &n)
+// Fused find and map: the parsed value is returned, not the header
+// line it came from, and the lines after it are never parsed.
+headers := catena.Of("Host: example.com", "Content-Length: 348", "Accept: */*")
+length, ok := headers.FindMap(func(h string) (int, bool) {
+	value, found := strings.CutPrefix(h, "Content-Length: ")
+	if !found {
+		return 0, false
+	}
+	n, err := strconv.Atoi(value)
 	return n, err == nil
 })
-fmt.Println(v, ok)
+fmt.Println(length, ok)
 ```
 
 ```
-12 true
+348 true
 ```
 
 ## Any
@@ -206,13 +244,18 @@ func (s Seq[T]) Any(pred func(T) bool) bool
 Any reports whether pred admits any element; stops at the first match.
 
 ```go
-// Stops at the first match, so it terminates on an infinite source.
-fmt.Println(catena.Generate(1, func(n int) int { return n + 1 }).
-	Any(func(n int) bool { return n > 100 }))
+// Stops at the first match, so it terminates even on an endless
+// source. Here the two lines after the error are never read.
+read := 0
+log := catena.Of("INFO boot", "ERROR disk full", "INFO retrying", "INFO ok").
+	OnEach(func(string) { read++ })
+
+failed := log.Any(func(line string) bool { return strings.HasPrefix(line, "ERROR") })
+fmt.Println(failed, read)
 ```
 
 ```
-true
+true 2
 ```
 
 ## All
@@ -224,9 +267,17 @@ func (s Seq[T]) All(pred func(T) bool) bool
 All reports whether pred admits every element; stops at the first counterexample. Vacuously true on empty input.
 
 ```go
-// Vacuously true on an empty sequence.
-fmt.Println(catena.Of(2, 4).All(func(n int) bool { return n%2 == 0 }))
-fmt.Println(catena.Empty[int]().All(func(n int) bool { return false }))
+// Vacuously true on an empty sequence: a pipeline with no checks
+// "passes", so guard for that separately if it matters.
+type check struct {
+	Name   string
+	Passed bool
+}
+passed := func(c check) bool { return c.Passed }
+
+ci := catena.Of(check{"lint", true}, check{"unit", true}, check{"e2e", true})
+fmt.Println(ci.All(passed))
+fmt.Println(catena.Empty[check]().All(passed))
 ```
 
 ```
@@ -243,7 +294,10 @@ func (s Seq[T]) None(pred func(T) bool) bool
 None reports whether pred admits no element; stops at the first match.
 
 ```go
-fmt.Println(catena.Of(1, 3).None(func(n int) bool { return n%2 == 0 }))
+// "Did anything go wrong?" asked the other way round; like Any, it
+// stops at the first match.
+statuses := catena.Of(200, 204, 301, 404)
+fmt.Println(statuses.None(func(code int) bool { return code >= 500 }))
 ```
 
 ```
@@ -263,11 +317,13 @@ Full drain
 :::
 
 ```go
-fmt.Println(catena.Of("a", "b", "c").Count())
+// Counts by consuming: nothing is collected along the way.
+body := "the quick brown fox jumps over the lazy dog"
+fmt.Println(catena.FromSlice(strings.Fields(body)).Count())
 ```
 
 ```
-3
+9
 ```
 
 ## CountWhere
@@ -284,11 +340,12 @@ Full drain
 
 ```go
 // Fused filter and count: one stage rather than two.
-fmt.Println(catena.Range(1, 11, 1).CountWhere(func(n int) bool { return n%3 == 0 }))
+statuses := catena.Of(200, 503, 200, 404, 500, 200)
+fmt.Println(statuses.CountWhere(func(code int) bool { return code >= 500 }))
 ```
 
 ```
-3
+2
 ```
 
 ## IsEmpty
@@ -306,7 +363,9 @@ It does so by consuming one element — on a single-pass source that element is 
 ```go
 // Answers by consuming one element — on a single-pass source that
 // element is gone.
-fmt.Println(catena.Empty[int]().IsEmpty(), catena.Of(1).IsEmpty())
+statuses := catena.Of(200, 204, 301)
+serverErrors := statuses.Filter(func(code int) bool { return code >= 500 })
+fmt.Println(serverErrors.IsEmpty(), statuses.IsEmpty())
 ```
 
 ```
@@ -322,11 +381,13 @@ func Contains[T comparable](s Seq[T], v T) bool
 Contains reports whether v occurs in s; stops at the first match.
 
 ```go
-fmt.Println(catena.Contains(catena.Of(1, 2, 3), 2))
+// Membership by ==, stopping at the first hit.
+roles := catena.Of("viewer", "editor", "admin")
+fmt.Println(catena.Contains(roles, "admin"), catena.Contains(roles, "owner"))
 ```
 
 ```
-true
+true false
 ```
 
 ## IndexOf
@@ -338,12 +399,14 @@ func IndexOf[T comparable](s Seq[T], v T) int
 IndexOf returns the index of the first occurrence of v; -1 if none.
 
 ```go
-fmt.Println(catena.IndexOf(catena.Of("a", "b"), "b"))
-fmt.Println(catena.IndexOf(catena.Of("a"), "z"))
+// The position of the first equal element, or -1.
+stages := catena.Of("build", "test", "deploy")
+fmt.Println(catena.IndexOf(stages, "deploy"))
+fmt.Println(catena.IndexOf(stages, "rollback"))
 ```
 
 ```
-1
+2
 -1
 ```
 
@@ -356,8 +419,13 @@ func Equal[T comparable](a, b Seq[T]) bool
 Equal reports whether a and b yield the same elements in the same order. Consumes both sequences up to and including the first difference — fully when they are equal. b is consumed through iter.Pull (its cleanup always runs).
 
 ```go
-fmt.Println(catena.Equal(catena.Of(1, 2), catena.Of(1, 2)))
-fmt.Println(catena.Equal(catena.Of(1, 2), catena.Of(1)))
+// Same elements in the same order. A sequence that merely starts
+// the same way is not equal.
+expected := catena.Of("001_users", "002_orders", "003_indexes")
+applied := catena.Of("001_users", "002_orders", "003_indexes")
+behind := catena.Of("001_users", "002_orders")
+fmt.Println(catena.Equal(expected, applied))
+fmt.Println(catena.Equal(expected, behind))
 ```
 
 ```

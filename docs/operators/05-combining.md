@@ -11,11 +11,17 @@ func (s Seq[T]) Concat(others ...Seq[T]) Seq[T]
 Concat yields s, then each of the others in order.
 
 ```go
-fmt.Println(catena.Of(1, 2).Concat(catena.Of(3), catena.Of(4, 5)).Collect())
+// One sequence after another, any number of them: resolvers in the
+// order they should be tried. No sequence is read until the one before
+// it is exhausted.
+primary := catena.Of("10.0.0.2", "10.0.0.3")
+office := catena.Of("192.168.1.1")
+public := catena.Of("1.1.1.1", "8.8.8.8")
+fmt.Println(primary.Concat(office, public).Collect())
 ```
 
 ```
-[1 2 3 4 5]
+[10.0.0.2 10.0.0.3 192.168.1.1 1.1.1.1 8.8.8.8]
 ```
 
 ## Append
@@ -27,11 +33,14 @@ func (s Seq[T]) Append(vals ...T) Seq[T]
 Append yields s, then the given values.
 
 ```go
-fmt.Println(catena.Of("a").Append("b", "c").Collect())
+// Loose values on the end, without wrapping them in a sequence first:
+// the flags a wrapper always adds after the user's own arguments.
+userArgs := catena.Of("test", "./...")
+fmt.Println(userArgs.Append("-race", "-count=1").Collect())
 ```
 
 ```
-[a b c]
+[test ./... -race -count=1]
 ```
 
 ## Prepend
@@ -43,11 +52,18 @@ func (s Seq[T]) Prepend(vals ...T) Seq[T]
 Prepend yields the given values, then s.
 
 ```go
-fmt.Println(catena.Of("c").Prepend("a", "b").Collect())
+// Loose values on the front: a header row ahead of the data, without
+// building a second sequence just to hold it.
+rows := catena.Of("report.pdf,48200", "logo.png,9100")
+for line := range rows.Prepend("name,bytes").Seq() {
+	fmt.Println(line)
+}
 ```
 
 ```
-[a b c]
+name,bytes
+report.pdf,48200
+logo.png,9100
 ```
 
 ## Chain
@@ -59,12 +75,19 @@ func Chain[T any](seqs ...Seq[T]) Seq[T]
 Chain yields each sequence's elements in order. It is the package-function form of Seq.Concat, for when you hold a slice of sequences and no receiver.
 
 ```go
-// The variadic form, for when the sequences are in a slice already.
-fmt.Println(catena.Chain(catena.Of(1), catena.Of(2), catena.Of(3)).Collect())
+// The variadic form of Concat, for when the sequences are in a slice
+// already and none of them is the obvious receiver — one per rotated
+// log file, say.
+rotated := []catena.Seq[string]{
+	catena.Of("mon:start", "mon:stop"),
+	catena.Of("tue:start"),
+	catena.Of("wed:start", "wed:crash"),
+}
+fmt.Println(catena.Chain(rotated...).Collect())
 ```
 
 ```
-[1 2 3]
+[mon:start mon:stop tue:start wed:start wed:crash]
 ```
 
 ## Zip
@@ -76,16 +99,17 @@ func (s Seq[T]) Zip[U any](other Seq[U]) Seq2[T, U]
 Zip pairs elements of s with elements of other, stopping at the shorter side. The receiver drives; other is consumed through iter.Pull (its cleanup always runs). other is pulled once per emitted pair; the receiver is consumed one element past the pair count when other is shorter.
 
 ```go
-// Pairs elements positionally and stops at the shorter side.
-names := catena.Of("ada", "bob", "eve")
-scores := catena.Of(90, 85)
-fmt.Println(names.Zip(scores).
-	MapTo(func(n string, s int) string { return fmt.Sprintf("%s=%d", n, s) }).
+// Pairs elements positionally and stops at the shorter side: a CSV row
+// that is missing its last field yields only the columns it has.
+header := catena.Of("host", "port", "region")
+row := catena.Of("db-1", "5432")
+fmt.Println(header.Zip(row).
+	MapTo(func(column, value string) string { return column + "=" + value }).
 	Collect())
 ```
 
 ```
-[ada=90 bob=85]
+[host=db-1 port=5432]
 ```
 
 ## ZipWithNext
@@ -98,13 +122,16 @@ ZipWithNext yields each adjacent pair (element, next element). Empty and single-
 
 ```go
 // Each element paired with its successor — deltas, gaps, transitions.
-fmt.Println(catena.Of(3, 7, 12).ZipWithNext().
-	MapTo(func(a, b int) int { return b - a }).
+// Here, the seconds between heartbeats; the long gap is the outage.
+// Four heartbeats make three gaps.
+heartbeats := catena.Of(0, 30, 61, 245)
+fmt.Println(heartbeats.ZipWithNext().
+	MapTo(func(prev, next int) int { return next - prev }).
 	Collect())
 ```
 
 ```
-[4 5]
+[30 31 184]
 ```
 
 ## WithIndex
@@ -116,13 +143,18 @@ func (s Seq[T]) WithIndex() Seq2[int, T]
 WithIndex pairs each element with its index, counting from 0.
 
 ```go
-fmt.Println(catena.Of("a", "b").WithIndex().
-	MapTo(func(i int, s string) string { return fmt.Sprintf("%d%s", i, s) }).
+// The index becomes half of a pair, so it survives later stages: the
+// positions reported are those in the original file, counting from 0,
+// not those in the filtered result.
+lines := catena.Of("package main", "// TODO: add flags", "func main() {", "// TODO: exit code", "}")
+fmt.Println(lines.WithIndex().
+	Filter(func(_ int, line string) bool { return strings.Contains(line, "TODO") }).
+	Keys().
 	Collect())
 ```
 
 ```
-[0a 1b]
+[1 3]
 ```
 
 ## JoinBy
@@ -142,8 +174,9 @@ Buffers all of other before the first emission
 :::
 
 ```go
-// A relational inner join: unmatched rows on either side are dropped,
-// and duplicate keys produce the cross product.
+// A relational inner join. Rows without a match are dropped on both
+// sides — the order for unknown customer 9, and eve, who ordered
+// nothing — and a key that matches twice produces a row each time.
 type order struct {
 	Customer int
 	Amount   int
@@ -152,8 +185,8 @@ type customer struct {
 	ID   int
 	Name string
 }
-orders := catena.Of(order{1, 30}, order{2, 10}, order{9, 99})
-customers := catena.Of(customer{1, "ada"}, customer{2, "bob"})
+orders := catena.Of(order{1, 30}, order{2, 10}, order{9, 99}, order{1, 45})
+customers := catena.Of(customer{1, "ada"}, customer{2, "bob"}, customer{3, "eve"})
 
 fmt.Println(orders.JoinBy(customers,
 	func(o order) int { return o.Customer },
@@ -163,7 +196,7 @@ fmt.Println(orders.JoinBy(customers,
 ```
 
 ```
-[ada:30 bob:10]
+[ada:30 bob:10 ada:45]
 ```
 
 ## LeftJoinBy
@@ -183,8 +216,8 @@ Buffers all of other before the first emission
 :::
 
 ```go
-// A left outer join: the order with no customer is kept, and combine
-// is told so.
+// A left outer join: the order with no customer on file is kept, and
+// combine is told so, receiving a zero customer and false.
 type order struct {
 	Customer int
 	Amount   int
@@ -201,7 +234,7 @@ fmt.Println(orders.LeftJoinBy(customers,
 	func(c customer) int { return c.ID },
 	func(o order, c customer, ok bool) string {
 		if !ok {
-			return fmt.Sprintf("?:%d", o.Amount)
+			return fmt.Sprintf("guest:%d", o.Amount)
 		}
 		return fmt.Sprintf("%s:%d", c.Name, o.Amount)
 	},
@@ -209,7 +242,7 @@ fmt.Println(orders.LeftJoinBy(customers,
 ```
 
 ```
-[ada:30 ?:99]
+[ada:30 guest:99]
 ```
 
 ## GroupJoinBy
@@ -230,7 +263,7 @@ Buffers all of other before the first emission
 
 ```go
 // One row per customer with all of their orders together — where
-// JoinBy would repeat the customer once per order.
+// JoinBy would repeat ada once per order and drop bob, who has none.
 type order struct {
 	Customer int
 	Amount   int
@@ -262,10 +295,12 @@ func (s Seq[T]) Then[U any](f func(Seq[T]) U) U
 Then returns f(s): it lets a function that takes a sequence sit inside a chain instead of wrapping it. That is every package function of one argument — s.Then(catena.Distinct).Then(catena.Sorted), or s.Then(catena.Sum) to finish — and every stage built by the parallel package. A function needing more arguments goes in a closure.
 
 ```go
-// Package functions sit inside the chain instead of wrapping it; a
-// function taking more than the sequence goes in a closure.
-words := catena.Of("b", "a", "b", "c", "a")
-fmt.Println(words.
+// Package functions sit inside the chain instead of wrapping it, so
+// the steps read in the order they happen: dedupe the hosts, sort
+// them, roll out two at a time. A function taking more than the
+// sequence goes in a closure.
+hosts := catena.Of("web-2", "web-1", "web-2", "web-3", "web-1")
+fmt.Println(hosts.
 	Then(catena.Distinct).
 	Then(catena.Sorted).
 	Then(func(s catena.Seq[string]) catena.Seq[[]string] { return catena.Chunked(s, 2) }).
@@ -273,7 +308,7 @@ fmt.Println(words.
 ```
 
 ```
-[[a b] [c]]
+[[web-1 web-2] [web-3]]
 ```
 
 ## Union
@@ -289,13 +324,15 @@ Retains one entry per distinct value — unbounded
 :::
 
 ```go
-// Set semantics: the result is deduplicated, in encounter order,
-// left operand first.
-fmt.Println(catena.Union(catena.Of(1, 2, 2), catena.Of(3, 1)).Collect())
+// Set semantics: a permission granted twice, or by both the role and
+// the team, appears once. Encounter order, left operand first.
+fromRole := catena.Of("read", "write", "write")
+fromTeam := catena.Of("deploy", "read")
+fmt.Println(catena.Union(fromRole, fromTeam).Collect())
 ```
 
 ```
-[1 2 3]
+[read write deploy]
 ```
 
 ## Intersect
@@ -311,11 +348,15 @@ Buffers all of b before a is consumed, plus a seen- set of a's distinct values
 :::
 
 ```go
-fmt.Println(catena.Intersect(catena.Of(1, 2, 3), catena.Of(3, 1)).Collect())
+// What both sides have — the users active last week who came back
+// this week — in the order of the first operand.
+lastWeek := catena.Of("ada", "bob", "eve", "dan")
+thisWeek := catena.Of("eve", "zoe", "ada")
+fmt.Println(catena.Intersect(lastWeek, thisWeek).Collect())
 ```
 
 ```
-[1 3]
+[ada eve]
 ```
 
 ## Except
@@ -331,11 +372,15 @@ Buffers all of b before a is consumed, plus a seen- set of a's distinct values
 :::
 
 ```go
-fmt.Println(catena.Except(catena.Of(1, 2, 3), catena.Of(2)).Collect())
+// What the first side has that the second does not: the hosts still
+// waiting for a patch.
+fleet := catena.Of("web-1", "web-2", "db-1", "cache-1")
+patched := catena.Of("web-2", "cache-1")
+fmt.Println(catena.Except(fleet, patched).Collect())
 ```
 
 ```
-[1 3]
+[web-1 db-1]
 ```
 
 ## Intersperse
@@ -347,11 +392,20 @@ func (s Seq[T]) Intersperse(sep T) Seq[T]
 Intersperse yields sep between consecutive elements.
 
 ```go
-fmt.Println(catena.Of("a", "b", "c").Intersperse("-").Collect())
+// A separator between elements but not before the first or after the
+// last — the fence-post problem, handled once.
+menu := catena.Of("Open", "Save", "Quit")
+for line := range menu.Intersperse("----").Seq() {
+	fmt.Println(line)
+}
 ```
 
 ```
-[a - b - c]
+Open
+----
+Save
+----
+Quit
 ```
 
 ## IfEmpty
@@ -363,12 +417,15 @@ func (s Seq[T]) IfEmpty(defaults ...T) Seq[T]
 IfEmpty yields s, or the given defaults if s yields nothing.
 
 ```go
-// A fallback for the whole sequence, not per element.
-fmt.Println(catena.Of(1, 2).IfEmpty(0).Collect())
-fmt.Println(catena.Empty[int]().IfEmpty(0).Collect())
+// A fallback for the whole sequence, not per element: the default
+// applies only when nothing at all was configured.
+configured := catena.Of("eu-1.example.com", "eu-2.example.com")
+unset := catena.Empty[string]()
+fmt.Println(configured.IfEmpty("localhost").Collect())
+fmt.Println(unset.IfEmpty("localhost").Collect())
 ```
 
 ```
-[1 2]
-[0]
+[eu-1.example.com eu-2.example.com]
+[localhost]
 ```
