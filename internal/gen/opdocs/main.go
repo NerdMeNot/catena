@@ -15,7 +15,7 @@
 // functions also appear on pkg.go.dev at no extra cost.
 //
 // The sub-packages are read the same way; their operators are named with
-// the package (`par.Map`), which is also how a caller writes them.
+// the package (`parallel.Map`), which is also how a caller writes them.
 //
 // Run `go generate ./...`; CI fails if the output is not current.
 package main
@@ -42,7 +42,7 @@ type family struct {
 	Title   string
 	Summary string
 	// Members are godoc names: "Seq.Filter" for a method, "Distinct" for
-	// a package function, "par.Map" for a sub-package's.
+	// a package function, "parallel.Map" for a sub-package's.
 	Members []string
 }
 
@@ -56,7 +56,7 @@ type source struct {
 
 var sources = []source{
 	{Dir: ".", Package: "catena"},
-	{Dir: "par", Package: "par", Prefix: "par."},
+	{Dir: "parallel", Package: "parallel", Prefix: "parallel."},
 	{Dir: "source", Package: "source", Prefix: "source."},
 	{Dir: "source/sqlsource", Package: "sqlsource", Prefix: "sqlsource."},
 }
@@ -283,7 +283,7 @@ var families = []family{
 		Order: 15,
 		Slug:  "concurrency",
 		Title: "Concurrency",
-		Summary: "The operators that start goroutines, in the `catena/par` package — the " +
+		Summary: "The operators that start goroutines, in the `catena/parallel` package — the " +
 			"core package never does. Each is a stage that sits in a chain through " +
 			"`Seq.Then`, and each joins every goroutine it started before its iteration " +
 			"returns: on a normal end, an early break, a cancelled context and a panic " +
@@ -292,8 +292,8 @@ var families = []family{
 			"`Merge` run the source itself on a goroutine of its own. The " +
 			"[concurrency guide](../06-concurrency.md) explains the two models.",
 		Members: []string{
-			"par.Map", "par.MapUnordered", "par.ForEach",
-			"par.Buffer", "par.ChunkedWithin", "par.Merge",
+			"parallel.Map", "parallel.MapUnordered", "parallel.ForEach",
+			"parallel.Buffer", "parallel.ChunkedWithin", "parallel.Merge",
 		},
 	},
 	{

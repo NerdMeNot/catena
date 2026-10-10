@@ -1,8 +1,8 @@
-package par
+package parallel
 
 import "testing"
 
-// fifo is the one piece of par small enough, and enough like a classic
+// fifo is the one piece of parallel small enough, and enough like a classic
 // place for an off-by-one, to test from the inside.
 func TestFifo(t *testing.T) {
 	var q fifo[*int]

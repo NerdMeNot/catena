@@ -58,7 +58,7 @@ func TestAnalyzersOnCatenaItself(t *testing.T) {
 		Mode: packages.LoadSyntax,
 		Dir:  testdata,
 		Env:  append(os.Environ(), "GOWORK=off"),
-	}, catena, catena+"/par", catena+"/source/...")
+	}, catena, catena+"/parallel", catena+"/source/...")
 	if err != nil {
 		t.Fatal(err)
 	}

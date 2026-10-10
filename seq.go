@@ -320,7 +320,7 @@ func (s Seq[T]) Reversed() Seq[T] {
 // Then returns f(s): it lets a function that takes a sequence sit inside a
 // chain instead of wrapping it. That is every package function of one
 // argument — s.Then(catena.Distinct).Then(catena.Sorted), or
-// s.Then(catena.Sum) to finish — and every stage built by the par package.
+// s.Then(catena.Sum) to finish — and every stage built by the parallel package.
 // A function needing more arguments goes in a closure.
 //
 //catena:seq-only

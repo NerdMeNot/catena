@@ -57,7 +57,7 @@ things that make or break iterator code in practice.
 **Nothing is hidden.** No `reflect`, no `any` in value position, no hidden
 buffering, and exactly one goroutine in the core package — `ToChan`'s,
 declared in the first line of its doc comment. Concurrency is a separate
-import, [`catena/par`](docs/06-concurrency.md), where every operator joins
+import, [`catena/parallel`](docs/06-concurrency.md), where every operator joins
 the goroutines it started before it returns. An operator that buffers says so
 too, with its bound; a terminal that would hang on an infinite sequence is
 marked; an invalid argument panics at construction, naming the operator
@@ -121,7 +121,7 @@ nothing outlives the call:
 ```go
 bodies, err := catena.FromSlice(urls).
     Filter(isHTTPS).
-    Then(par.Map(ctx, 8, fetch)). // eight at a time, results in order
+    Then(parallel.Map(ctx, 8, fetch)). // eight at a time, results in order
     Collect()                     // every goroutine has exited by here
 ```
 
@@ -176,7 +176,7 @@ you can judge what the nanoseconds buy.
 
 | Package | What it adds |
 |---|---|
-| `catena/par` | the operators that start goroutines: `Map`, `MapUnordered`, `ForEach`, `Buffer`, `ChunkedWithin`, `Merge` |
+| `catena/parallel` | the operators that start goroutines: `Map`, `MapUnordered`, `ForEach`, `Buffer`, `ChunkedWithin`, `Merge` |
 | `catena/source` | producers that open lazily and always release: `Lines`, `Paginate`, and `sqlsource.Rows` |
 | `catena/lint` | a separate module: `catenalint`, which finds pipelines that sort everything to keep ten, or never run |
 
@@ -206,7 +206,7 @@ Guides, in reading order:
 3. [Error handling](docs/03-error-handling.md) — `Try` and resource-owning producers
 4. [Operator catalog](docs/04-operators.md) — the index, with memory and drain classes
 5. [Performance](docs/05-performance.md) — the three-way benchmarks, honestly
-6. [Concurrency](docs/06-concurrency.md) — the `par` package and its guarantee
+6. [Concurrency](docs/06-concurrency.md) — the `parallel` package and its guarantee
 7. [Linting](docs/07-linting.md) — `catenalint` and what its fixes promise
 8. [Releasing](docs/08-releasing.md) — how a release is cut and verified
 

@@ -1,4 +1,4 @@
-package par_test
+package parallel_test
 
 import (
 	"context"
@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/NerdMeNot/catena"
-	"github.com/NerdMeNot/catena/par"
+	"github.com/NerdMeNot/catena/parallel"
 )
 
 // What a stage costs when the callback costs nothing: the price of the
 // goroutine per element, which is what an errgroup-style loop pays too.
-// These exist to put a number on it, so the docs can say when par is and
+// These exist to put a number on it, so the docs can say when parallel is and
 // is not worth reaching for.
 
 var benchInput = catena.Range(0, 10_000, 1).Collect()
@@ -58,7 +58,7 @@ func BenchmarkMap_Hand(b *testing.B) {
 }
 
 func BenchmarkMap_Par(b *testing.B) {
-	stage := catena.FromSlice(benchInput).Then(par.Map(context.Background(), 8, double))
+	stage := catena.FromSlice(benchInput).Then(parallel.Map(context.Background(), 8, double))
 	b.ReportAllocs()
 	for b.Loop() {
 		n := 0
@@ -70,7 +70,7 @@ func BenchmarkMap_Par(b *testing.B) {
 }
 
 func BenchmarkMapUnordered_Par(b *testing.B) {
-	stage := catena.FromSlice(benchInput).Then(par.MapUnordered(context.Background(), 8, double))
+	stage := catena.FromSlice(benchInput).Then(parallel.MapUnordered(context.Background(), 8, double))
 	b.ReportAllocs()
 	for b.Loop() {
 		n := 0
@@ -82,7 +82,7 @@ func BenchmarkMapUnordered_Par(b *testing.B) {
 }
 
 func BenchmarkBuffer(b *testing.B) {
-	stage := catena.FromSlice(benchInput).Then(par.Buffer[int](64))
+	stage := catena.FromSlice(benchInput).Then(parallel.Buffer[int](64))
 	b.ReportAllocs()
 	for b.Loop() {
 		n := 0

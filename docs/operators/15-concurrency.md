@@ -1,6 +1,6 @@
 # Concurrency
 
-The operators that start goroutines, in the `catena/par` package — the core package never does. Each is a stage that sits in a chain through `Seq.Then`, and each joins every goroutine it started before its iteration returns: on a normal end, an early break, a cancelled context and a panic alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently while the source stays on the consumer's goroutine; `Buffer`, `ChunkedWithin` and `Merge` run the source itself on a goroutine of its own. The [concurrency guide](../06-concurrency.md) explains the two models.
+The operators that start goroutines, in the `catena/parallel` package — the core package never does. Each is a stage that sits in a chain through `Seq.Then`, and each joins every goroutine it started before its iteration returns: on a normal end, an early break, a cancelled context and a panic alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently while the source stays on the consumer's goroutine; `Buffer`, `ChunkedWithin` and `Merge` run the source itself on a goroutine of its own. The [concurrency guide](../06-concurrency.md) explains the two models.
 
 ## Map
 
@@ -28,7 +28,7 @@ lookup := func(_ context.Context, name string) (int, error) {
 	return len(name), nil
 }
 lengths, err := catena.Of("ada", "grace", "linus").
-	Then(par.Map(context.Background(), 8, lookup)).
+	Then(parallel.Map(context.Background(), 8, lookup)).
 	Collect()
 fmt.Println(lengths, err)
 ```
@@ -64,7 +64,7 @@ upper := func(_ context.Context, s string) (string, error) {
 	return strings.ToUpper(s), nil
 }
 got, _ := catena.Of("b", "c", "a").
-	Then(par.MapUnordered(context.Background(), 3, upper)).
+	Then(parallel.MapUnordered(context.Background(), 3, upper)).
 	Collect()
 slices.Sort(got)
 fmt.Println(got)
@@ -98,7 +98,7 @@ add := func(_ context.Context, n int) error {
 	total.Add(int64(n))
 	return nil
 }
-err := catena.Range(1, 101, 1).Then(par.ForEach(context.Background(), 8, add))
+err := catena.Range(1, 101, 1).Then(parallel.ForEach(context.Background(), 8, add))
 fmt.Println(total.Load(), err)
 ```
 
@@ -112,7 +112,7 @@ fmt.Println(total.Load(), err)
 func Buffer[T any](n int) func(catena.Seq[T]) catena.Seq[T]
 ```
 
-Buffer returns a stage that runs its source ahead of the consumer, on a goroutine of its own, holding up to n elements ready: a slow source and a slow consumer overlap instead of taking turns. Order is preserved. T cannot be inferred — write par.Buffer[int](64). Panics if n <= 0.
+Buffer returns a stage that runs its source ahead of the consumer, on a goroutine of its own, holding up to n elements ready: a slow source and a slow consumer overlap instead of taking turns. Order is preserved. T cannot be inferred — write parallel.Buffer[int](64). Panics if n <= 0.
 
 :::caution
 Starts one goroutine per iteration, joined before it returns, so stopping waits for the source's current step
@@ -130,7 +130,7 @@ Everything upstream runs concurrently with the consumer's loop body
 // The source runs up to 16 elements ahead, on its own goroutine, so
 // a slow producer and a slow consumer overlap. Order is unchanged.
 squares := catena.Range(1, 6, 1).Map(func(n int) int { return n * n })
-fmt.Println(squares.Then(par.Buffer[int](16)).Collect())
+fmt.Println(squares.Then(parallel.Buffer[int](16)).Collect())
 ```
 
 ```
@@ -143,7 +143,7 @@ fmt.Println(squares.Then(par.Buffer[int](16)).Collect())
 func ChunkedWithin[T any](n int, d time.Duration) func(catena.Seq[T]) catena.Seq[[]T]
 ```
 
-ChunkedWithin returns a stage that batches by size or by time, whichever comes first: it yields a chunk when it holds n elements, or when d has passed since the chunk's first element arrived, and yields the last partial chunk when the source ends. It never yields an empty chunk, so a silent source yields nothing. Every chunk is a fresh slice. T cannot be inferred — write par.ChunkedWithin[int](100, time.Second). Panics if n <= 0 or d <= 0.
+ChunkedWithin returns a stage that batches by size or by time, whichever comes first: it yields a chunk when it holds n elements, or when d has passed since the chunk's first element arrived, and yields the last partial chunk when the source ends. It never yields an empty chunk, so a silent source yields nothing. Every chunk is a fresh slice. T cannot be inferred — write parallel.ChunkedWithin[int](100, time.Second). Panics if n <= 0 or d <= 0.
 
 :::caution
 Starts one goroutine per iteration, joined before it returns, so stopping waits for the source's current step
@@ -161,7 +161,7 @@ Everything upstream runs concurrently with the consumer's loop body
 // Batches of up to three, or whatever has arrived within a minute.
 // This source never pauses, so every chunk closes on size.
 batches := catena.Range(1, 8, 1).
-	Then(par.ChunkedWithin[int](3, time.Minute)).
+	Then(parallel.ChunkedWithin[int](3, time.Minute)).
 	Collect()
 fmt.Println(batches)
 ```
@@ -189,7 +189,7 @@ The sources run concurrently with each other and with the consumer's loop body
 ```go
 // Each sequence runs on its own goroutine; elements arrive as they
 // are produced, so only the order within one sequence is fixed.
-got := par.Merge(catena.Of(1, 2, 3), catena.Of(10, 20), catena.Of(100)).Collect()
+got := parallel.Merge(catena.Of(1, 2, 3), catena.Of(10, 20), catena.Of(100)).Collect()
 slices.Sort(got)
 fmt.Println(got)
 ```

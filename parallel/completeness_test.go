@@ -1,6 +1,6 @@
-package par_test
+package parallel_test
 
-// The completeness check: every exported symbol of package par must be
+// The completeness check: every exported symbol of package parallel must be
 // registered in the conformance harness or named in dedicatedCovered, and
 // every operator's doc comment must declare what it starts and holds.
 // An operator added without either fails here rather than shipping on
@@ -24,9 +24,9 @@ func TestCompleteness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pkg, ok := pkgs["par"]
+	pkg, ok := pkgs["parallel"]
 	if !ok {
-		t.Fatal("package par not found")
+		t.Fatal("package parallel not found")
 	}
 
 	docs := map[string]string{} // exported name -> doc comment

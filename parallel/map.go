@@ -1,4 +1,4 @@
-package par
+package parallel
 
 import (
 	"context"

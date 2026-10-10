@@ -47,7 +47,7 @@ a warning.
 | `DistinctWith` | [S] ⚠ mem distinct; O(n²) compares — small inputs |
 | `Reversed` | ⚠ mem all, ⚠∞ |
 | `Once` | panics on second consumption — a development guard |
-| `Then(f)` | returns `f(s)` — chains package functions and `par` stages |
+| `Then(f)` | returns `f(s)` — chains package functions and `parallel` stages |
 | `UntilDone(ctx)` | → `Try`; yields ctx.Err() and stops on cancellation |
 
 ## Type-changing intermediates (`seq_map.go`)
@@ -151,7 +151,7 @@ emitted slice is fresh; retaining one is always safe.
 | `Windowed(s, size, step)` | [S] ⚠ mem size; full windows only; step > size samples |
 | `GroupedBy(s, sel)` | → `Seq2[K, []T]`, keys in first-seen order — GroupBy that stays in the chain; ⚠ mem all, ⚠∞ |
 
-## Concurrency (`catena/par`)
+## Concurrency (`catena/parallel`)
 
 The operators that start goroutines, as stages for `Seq.Then`. Every one
 joins its goroutines before its iteration returns. See
@@ -159,12 +159,12 @@ joins its goroutines before its iteration returns. See
 
 | Operator | Notes |
 |---|---|
-| `par.Map(ctx, n, f)` | → `Try`; `n` calls at once, results in source order; ⚠ mem `n` results; source stays on the consumer's goroutine |
-| `par.MapUnordered(ctx, n, f)` | → `Try`; results as calls finish; ⚠ mem `n` |
-| `par.ForEach(ctx, n, f)` | terminal; first error, the rest cancelled and joined; ⚠∞ on success |
-| `par.Buffer[T](n)` | read-ahead on a goroutine of its own; ⚠ mem `n`; upstream runs concurrently with the consumer |
-| `par.ChunkedWithin[T](n, d)` | → `Seq[[]T]`; a chunk at `n` elements or `d` after its first; never empty; ⚠ mem `n` |
-| `par.Merge(seqs...)` | interleaves by arrival, one goroutine per input; order within an input is kept |
+| `parallel.Map(ctx, n, f)` | → `Try`; `n` calls at once, results in source order; ⚠ mem `n` results; source stays on the consumer's goroutine |
+| `parallel.MapUnordered(ctx, n, f)` | → `Try`; results as calls finish; ⚠ mem `n` |
+| `parallel.ForEach(ctx, n, f)` | terminal; first error, the rest cancelled and joined; ⚠∞ on success |
+| `parallel.Buffer[T](n)` | read-ahead on a goroutine of its own; ⚠ mem `n`; upstream runs concurrently with the consumer |
+| `parallel.ChunkedWithin[T](n, d)` | → `Seq[[]T]`; a chunk at `n` elements or `d` after its first; never empty; ⚠ mem `n` |
+| `parallel.Merge(seqs...)` | interleaves by arrival, one goroutine per input; order within an input is kept |
 
 ## Sources (`catena/source`, `catena/source/sqlsource`)
 

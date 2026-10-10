@@ -2,14 +2,14 @@
 
 The core package never starts a goroutine on your behalf — `ToChan` is the
 one exception, and it says so. Everything that does lives in a package of
-its own, `catena/par`, so that importing it is the moment you opt in:
+its own, `catena/parallel`, so that importing it is the moment you opt in:
 
 ```go
-import "github.com/NerdMeNot/catena/par"
+import "github.com/NerdMeNot/catena/parallel"
 
 bodies, err := catena.FromSlice(urls).
     Filter(isHTTPS).
-    Then(par.Map(ctx, 8, fetch)). // eight fetches at a time, in order
+    Then(parallel.Map(ctx, 8, fetch)). // eight fetches at a time, in order
     Collect()
 ```
 
@@ -31,13 +31,13 @@ more than the work. The numbers are in the
 
 ## Stages and `Then`
 
-A package cannot add methods to another package's type, so `par` cannot
+A package cannot add methods to another package's type, so `parallel` cannot
 give `Seq` a `ParMap` method. Its operators are *stages* instead:
-`par.Map(ctx, 8, fetch)` returns a function from a sequence to its result,
+`parallel.Map(ctx, 8, fetch)` returns a function from a sequence to its result,
 and `Seq.Then` applies a function to the sequence it is called on. The
 chain reads left to right, and the types are inferred.
 
-`Then` is not special to `par`. Any function of one sequence fits, which
+`Then` is not special to `parallel`. Any function of one sequence fits, which
 includes every one-argument package function in the core:
 
 ```go
@@ -67,7 +67,7 @@ goroutines cannot return while one of them is still running. So:
   its current step. A source blocked forever in a read that nothing
   interrupts blocks the stage forever with it.
 
-This is also why there is no `par.Timeout`. A timeout fires because the
+This is also why there is no `parallel.Timeout`. A timeout fires because the
 source is stuck — and a stage that cannot abandon a stuck goroutine
 cannot return to report it. Put the deadline where it can be honoured: in
 the context your source or callback reads.
@@ -85,7 +85,7 @@ Every operator is one of two kinds, and its doc comment says which.
 
 **Caller-driven** stages invoke their source exactly as the core
 operators do — directly, on the goroutine that is consuming. Nothing
-upstream of a `par.Map` becomes concurrent: a `Filter` before it, a
+upstream of a `parallel.Map` becomes concurrent: a `Filter` before it, a
 database cursor feeding it, a closure that counts — all still run on one
 goroutine, yours. Only the callback fans out.
 
@@ -118,7 +118,7 @@ it is much faster to first result.
 returns the first error, having cancelled and joined the rest.
 
 ```go
-err := catena.FromSlice(jobs).Then(par.ForEach(ctx, 16, run))
+err := catena.FromSlice(jobs).Then(parallel.ForEach(ctx, 16, run))
 ```
 
 ## Errors and cancellation
@@ -127,7 +127,7 @@ A failed callback is an element, not an abort. The stage keeps going, and
 the consumer decides:
 
 ```go
-stage := catena.FromSlice(ids).Then(par.Map(ctx, 8, load))
+stage := catena.FromSlice(ids).Then(parallel.Map(ctx, 8, load))
 
 vals, err  := stage.Collect()          // stop at the first failure; the rest are cancelled
 vals, errs := stage.CollectAll()       // run everything, gather every failure
@@ -141,7 +141,7 @@ A panic in a callback or in the source is re-raised on your goroutine,
 with its original value, after everything has been joined.
 
 If the input is itself a `Try`, pick its policy before the stage:
-`rows.Ignore().Then(par.Map(...))`, or `rows.Must()`. The stages take a
+`rows.Ignore().Then(parallel.Map(...))`, or `rows.Must()`. The stages take a
 `Seq`, for the same reason `Try` is small — once data can fail, decide
 what failure means and get the full API back.
 
@@ -153,7 +153,7 @@ closes a batch when it is full *or* when its oldest element has waited
 long enough:
 
 ```go
-for batch := range events.Then(par.ChunkedWithin[Event](500, time.Second)) {
+for batch := range events.Then(parallel.ChunkedWithin[Event](500, time.Second)) {
     insert(batch) // up to 500 rows, never more than a second stale
 }
 ```
@@ -162,7 +162,7 @@ The window opens when a batch receives its first element, not on a fixed
 tick, and an idle source yields nothing — there are no empty batches.
 
 `Buffer` and `ChunkedWithin` cannot infer their element type, since
-nothing in their arguments mentions it: write `par.Buffer[Event](64)`.
+nothing in their arguments mentions it: write `parallel.Buffer[Event](64)`.
 
 ## How this is tested
 

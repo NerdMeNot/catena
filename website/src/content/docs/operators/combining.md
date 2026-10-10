@@ -264,7 +264,7 @@ fmt.Println(customers.GroupJoinBy(orders,
 func (s Seq[T]) Then[U any](f func(Seq[T]) U) U
 ```
 
-Then returns f(s): it lets a function that takes a sequence sit inside a chain instead of wrapping it. That is every package function of one argument — s.Then(catena.Distinct).Then(catena.Sorted), or s.Then(catena.Sum) to finish — and every stage built by the par package. A function needing more arguments goes in a closure.
+Then returns f(s): it lets a function that takes a sequence sit inside a chain instead of wrapping it. That is every package function of one argument — s.Then(catena.Distinct).Then(catena.Sorted), or s.Then(catena.Sum) to finish — and every stage built by the parallel package. A function needing more arguments goes in a closure.
 
 ```go
 // Package functions sit inside the chain instead of wrapping it; a

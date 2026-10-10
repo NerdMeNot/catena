@@ -1,4 +1,4 @@
-package par
+package parallel
 
 import (
 	"sync"
@@ -10,7 +10,7 @@ import (
 // Buffer returns a stage that runs its source ahead of the consumer, on a
 // goroutine of its own, holding up to n elements ready: a slow source and
 // a slow consumer overlap instead of taking turns. Order is preserved.
-// T cannot be inferred — write par.Buffer[int](64). ⚠ Starts one
+// T cannot be inferred — write parallel.Buffer[int](64). ⚠ Starts one
 // goroutine per iteration, joined before it returns, so stopping waits
 // for the source's current step. ⚠ Buffers n elements and consumes up to
 // n+1 beyond those yielded. ⚠ Everything upstream runs concurrently with
@@ -57,7 +57,7 @@ func Merge[T any](seqs ...catena.Seq[T]) catena.Seq[T] {
 // passed since the chunk's first element arrived, and yields the last
 // partial chunk when the source ends. It never yields an empty chunk, so
 // a silent source yields nothing. Every chunk is a fresh slice. T cannot
-// be inferred — write par.ChunkedWithin[int](100, time.Second). ⚠ Starts
+// be inferred — write parallel.ChunkedWithin[int](100, time.Second). ⚠ Starts
 // one goroutine per iteration, joined before it returns, so stopping
 // waits for the source's current step. ⚠ Buffers up to n elements and
 // consumes at most one beyond those it holds. ⚠ Everything upstream runs
