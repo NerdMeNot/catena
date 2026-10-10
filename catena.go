@@ -6,7 +6,8 @@
 //   - Seq[T]:  lazy, single-pass by contract, possibly infinite.
 //   - Seq2[K, V]: the stdlib pairing currency; a bridge back to Seq, not a peer.
 //   - Try[T]:  Seq2[T, error]; error policy is chosen by the consumer
-//     (Collect stops at the first error, CollectAll drains, Ignore skips).
+//     (Collect and UntilErr stop at the first error, CollectAll drains,
+//     Ignore skips).
 //   - List[T]: eager []T with the mirrored operation set.
 //
 // Finding an operator: most are methods, but operations that constrain the

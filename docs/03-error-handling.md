@@ -11,6 +11,7 @@ probably abort.
 vals, err  := t.Collect()     // stop at the first error; partial slice + error
 vals, errs := t.CollectAll()  // drain everything, gather all errors
 vals       := t.Ignore().Collect()  // drop failures, continue as a plain Seq
+vals       := t.UntilErr(&err).Collect() // stop at the first error, as a plain Seq
 errs       := t.Errs().Collect()    // the other half: just the errors
 ```
 
@@ -42,16 +43,35 @@ first half, rule 5 is the second; rule 4 is a producer convention.
 
 ## `Try` is deliberately small
 
-`Try` carries 13 intermediates, three policy exits back to `Seq` (`Ignore`,
-`Errs`, `Must`) and the collecting terminals — against the 40 chainable
+`Try` carries 13 intermediates, four policy exits back to `Seq` (`Ignore`,
+`Errs`, `UntilErr`, `Must`) and the collecting terminals — against the 41 chainable
 operators `Seq` has. That is the design, not an omission: the
 moment data can fail, you should pick an error policy early and get the
 full API back. The intended shape is to stay in `Try` only while errors are
-still in play, then commit — `Ignore()`, `Must()`, `Collect()`,
+still in play, then commit — `Ignore()`, `UntilErr(&err)`, `Must()`, `Collect()`,
 `CollectAll()` — and continue on `Seq`.
 
 If you find yourself wanting `Sorted` or `GroupBy` on a `Try`, the errors
 have been carried one stage too far.
+
+## Stopping at the first error without leaving the chain
+
+`Collect` stops at the first error, but it ends the pipeline. `UntilErr`
+is the same policy as a sequence: it passes elements through until the
+first error, stops, and leaves that error where you told it to.
+
+```go
+var err error
+byTeam := rows.UntilErr(&err).GroupBy(team) // full Seq API from here on
+if err != nil {
+    return err // the rows up to the failure were grouped; decide what that means
+}
+```
+
+Check the error once the pipeline has been consumed — the same shape as
+`bufio.Scanner`, whose `Err` is read after the loop. It is how a fallible
+source feeds a stage that takes a plain `Seq`, including the concurrent
+ones: `rows.UntilErr(&err).Then(parallel.Map(ctx, 8, enrich))`.
 
 ## Adding context where it exists
 

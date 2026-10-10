@@ -188,7 +188,7 @@ slices: `catena.Unzip`.
 
 `Try` mirrors the intermediates under the five error rules
 ([03-error-handling.md](03-error-handling.md)) and adds the policy terminals:
-`Collect`, `CollectAll`, `Ignore`, `Errs`, `Must`, `Err`, plus `Recover`,
+`Collect`, `CollectAll`, `Ignore`, `Errs`, `UntilErr`, `Must`, `Err`, plus `Recover`,
 `WrapErr`, `OnError`, `UntilDone`.
 
 `List` mirrors the whole `Seq` operation set eagerly (generated, and

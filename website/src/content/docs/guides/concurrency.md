@@ -25,9 +25,10 @@ gathers them, `Ignore` skips.
 
 ## When it is worth it
 
-A stage starts a goroutine per element. With a callback that does nothing
-that costs about 0.3µs an element — the same as a hand-written loop with
-a semaphore, and some two hundred times what a plain `Map` costs. So the
+A stage hands every element to a pool of goroutines. With a callback that
+does nothing that costs about 0.26µs an element — less than a hand-written
+loop with a semaphore, and some two hundred times what a plain `Map`
+costs. So the
 rule is the usual one: use it for callbacks that *wait* — a request, a
 query, a file — where eight at a time is eight times the throughput, and
 not for callbacks that compute something small, where the goroutine costs
@@ -85,7 +86,7 @@ Every operator is one of two kinds, and its doc comment says which.
 |---|---|---|
 | The source runs on | your goroutine | a goroutine of its own |
 | What runs concurrently | only the callback | everything upstream of the stage |
-| Elements taken ahead of what you have received | at most `n` | `n+1` for `Buffer`, one otherwise |
+| Elements taken ahead of what you have received | at most `n` | `n+1` for `Buffer`; up to 64 more for the others |
 | The cost | a finished result waits for the source's next element | upstream code must be safe to run alongside your loop body |
 
 **Caller-driven** stages invoke their source exactly as the core
@@ -145,10 +146,23 @@ context's error once, and ends — the same shape as `UntilDone`.
 A panic in a callback or in the source is re-raised on your goroutine,
 with its original value, after everything has been joined.
 
-If the input is itself a `Try`, pick its policy before the stage:
-`rows.Ignore().Then(parallel.Map(...))`, or `rows.Must()`. The stages take a
-`Seq`, for the same reason `Try` is small — once data can fail, decide
-what failure means and get the full API back.
+If the input is itself a `Try` — rows from a query, pages from an API —
+give it a policy before the stage, since the stages take a plain `Seq`.
+`UntilErr` is usually the one: it stops at the source's first error and
+holds it for you to check once the pipeline has run.
+
+```go
+var srcErr error
+users, err := pages.UntilErr(&srcErr).
+    Then(parallel.Map(ctx, 8, enrich)).
+    Collect()
+if err = errors.Join(srcErr, err); err != nil {
+    return err
+}
+```
+
+Reading `srcErr` afterwards is safe even where the source ran on another
+goroutine: every stage has joined before `Collect` returns.
 
 ## Batching by time
 

@@ -237,7 +237,7 @@ var families = []family{
 			"Try.Map", "Try.MapErr", "Try.FlatMap", "Try.Filter", "Try.FilterErr",
 			"Try.Take", "Try.TakeWhile", "Try.Drop",
 			"Try.OnEach", "Try.OnError", "Try.Recover", "Try.WrapErr", "Try.UntilDone",
-			"Try.Collect", "Try.CollectAll", "Try.Ignore", "Try.Errs",
+			"Try.Collect", "Try.CollectAll", "Try.Ignore", "Try.Errs", "Try.UntilErr",
 			"Try.Fold", "Try.ForEach", "Try.Err", "Try.Count", "Try.Must",
 			"Try.Pull", "Try.Seq2",
 		},

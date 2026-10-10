@@ -513,3 +513,87 @@ func TestTryEarlyBreakBranches(t *testing.T) {
 		}
 	})
 }
+
+func TestTryUntilErr(t *testing.T) {
+	t.Run("stops at the first error and reports it", func(t *testing.T) {
+		var err error
+		calls := 0
+		src := catena.Try[int](func(yield func(int, error) bool) {
+			for _, it := range []tv{{1, nil}, {2, nil}, {0, e1}, {4, nil}, {0, e2}} {
+				calls++
+				if !yield(it.v, it.err) {
+					return
+				}
+			}
+		})
+		if got := src.UntilErr(&err).Collect(); !slices.Equal(got, []int{1, 2}) || err != e1 {
+			t.Fatalf("got %v, err %v", got, err)
+		}
+		// The source was told to stop at the error: nothing past it ran.
+		if calls != 3 {
+			t.Fatalf("source produced %d elements", calls)
+		}
+	})
+
+	t.Run("a clean run leaves nil, and a stale error is cleared", func(t *testing.T) {
+		err := e2 // left over from something earlier
+		if got := trySrc(tv{1, nil}, tv{2, nil}).UntilErr(&err).Collect(); !slices.Equal(got, []int{1, 2}) || err != nil {
+			t.Fatalf("got %v, err %v", got, err)
+		}
+	})
+
+	t.Run("each iteration reports its own outcome", func(t *testing.T) {
+		fail := true
+		src := catena.Try[int](func(yield func(int, error) bool) {
+			if fail {
+				yield(0, e1)
+				return
+			}
+			yield(7, nil)
+		})
+		var err error
+		seq := src.UntilErr(&err)
+		if got := seq.Collect(); got != nil || err != e1 {
+			t.Fatalf("first run: %v, %v", got, err)
+		}
+		fail = false
+		if got := seq.Collect(); !slices.Equal(got, []int{7}) || err != nil {
+			t.Fatalf("second run: %v, %v", got, err)
+		}
+	})
+
+	t.Run("an early stop downstream is not an error", func(t *testing.T) {
+		var err error
+		if got := mixed().UntilErr(&err).Take(1).Collect(); !slices.Equal(got, []int{1}) || err != nil {
+			t.Fatalf("got %v, err %v", got, err)
+		}
+	})
+
+	t.Run("nil is empty", func(t *testing.T) {
+		var none catena.Try[int]
+		err := e1
+		if got := none.UntilErr(&err).Collect(); got != nil || err != nil {
+			t.Fatalf("got %v, err %v", got, err)
+		}
+	})
+}
+
+func init() {
+	registerSeqOps([]seqOp{
+		{
+			name:   "MapErr_UntilErr",
+			covers: []string{"UntilErr"},
+			op: func(s catena.Seq[int]) catena.Seq[int] {
+				var err error
+				return s.MapErr(func(v int) (int, error) { return v + 1, nil }).UntilErr(&err)
+			},
+			model: func(in []int) []int {
+				var out []int
+				for _, v := range in {
+					out = append(out, v+1)
+				}
+				return out
+			},
+		},
+	}...)
+}

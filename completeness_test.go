@@ -110,7 +110,8 @@ var dedicatedCovered = map[string]string{
 	"Try.CollectAll": "TestTryCollectAll", "Try.Fold": "TestTryR5FirstErrorTerminals",
 	"Try.ForEach": "TestTryR5FirstErrorTerminals", "Try.Ignore": "TestTryIgnoreAndErrs",
 	"Try.Errs": "TestTryIgnoreAndErrs", "Try.Must": "TestTryMust",
-	"Try.Err": "TestTryR5FirstErrorTerminals", "Try.Count": "TestTryR5FirstErrorTerminals",
+	"Try.UntilErr": "TestTryUntilErr",
+	"Try.Err":      "TestTryR5FirstErrorTerminals", "Try.Count": "TestTryR5FirstErrorTerminals",
 	"Try.Pull": "TestTryPull", "Try.Seq2": "collectTry throughout",
 }
 

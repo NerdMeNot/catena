@@ -58,20 +58,25 @@ var (
 
 // ---- 4-stage pipeline: filter → map → filter → sum ----
 
+//go:noinline
+func handPipeline(xs []int) int {
+	sum := 0
+	for _, v := range xs {
+		if v%2 != 0 {
+			continue
+		}
+		v *= 3
+		if v > 100 {
+			sum += v
+		}
+	}
+	return sum
+}
+
 func BenchmarkThreeWay_Pipeline_Hand(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		sum := 0
-		for _, v := range benchData {
-			if v%2 != 0 {
-				continue
-			}
-			v *= 3
-			if v > 100 {
-				sum += v
-			}
-		}
-		benchSink = sum
+		benchSink = handPipeline(benchData)
 	}
 }
 
@@ -125,14 +130,25 @@ func BenchmarkThreeWay_Map_Catena(b *testing.B) {
 
 // ---- Sum: does delegation through SumOf(Self) cost per element? ----
 
+// The hand-written loops live in functions of their own, as they would in
+// a program. Written inline in the benchmark body they are measured under
+// b.Loop's rule that nothing in the body may be optimised away, which
+// keeps their accumulators in memory and makes a plain loop look several
+// times slower than it is.
+//
+//go:noinline
+func handSum(xs []int) int {
+	sum := 0
+	for _, v := range xs {
+		sum += v
+	}
+	return sum
+}
+
 func BenchmarkThreeWay_Sum_Hand(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		sum := 0
-		for _, v := range benchData {
-			sum += v
-		}
-		benchSink = sum
+		benchSink = handSum(benchData)
 	}
 }
 
@@ -548,18 +564,21 @@ func BenchmarkThen_With(b *testing.B) {
 	}
 }
 
+//go:noinline
+func handIsSorted(xs []int) bool {
+	for i := 1; i < len(xs); i++ {
+		if xs[i-1] > xs[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func BenchmarkIsSorted_Hand(b *testing.B) {
 	sorted := slices.Sorted(slices.Values(benchData))
 	b.ReportAllocs()
 	for b.Loop() {
-		ok := true
-		for i := 1; i < len(sorted); i++ {
-			if sorted[i-1] > sorted[i] {
-				ok = false
-				break
-			}
-		}
-		if ok {
+		if handIsSorted(sorted) {
 			benchSink++
 		}
 	}

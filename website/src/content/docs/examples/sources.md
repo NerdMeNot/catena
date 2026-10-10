@@ -19,6 +19,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -86,16 +87,19 @@ func main() {
 	all, _ := users.Collect()
 	fmt.Printf("all %d users, in %d requests\n", len(all), directory.requests)
 
-	// A source is just a sequence, so it feeds a concurrent stage like
-	// any other: page through the directory, and greet three at a time.
+	// A source is a Try, and a stage takes a plain sequence, so the
+	// source needs an error policy first. UntilErr stops at the source's
+	// first error and holds it: nothing is dropped, nothing panics, and
+	// the error is there to check once the pipeline has run.
 	greet := func(_ context.Context, u User) (string, error) {
 		return "hello, " + u.Name, nil
 	}
+	var listErr error
 	greetings, err := users.
-		Ignore().
+		UntilErr(&listErr).
 		Then(parallel.Map(context.Background(), 3, greet)).
 		Collect()
-	fmt.Println(greetings, err)
+	fmt.Println(greetings, errors.Join(listErr, err))
 
 	// catena/source/sqlsource has the same producer for database/sql:
 	//

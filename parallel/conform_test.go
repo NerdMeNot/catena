@@ -801,6 +801,59 @@ func conformMap(t *testing.T, c mapOp) {
 	})
 }
 
+// A fallible source feeding a stage: UntilErr stops at the source's first
+// error and holds it, so nothing is dropped and nothing panics, and by the
+// time the pipeline has been consumed the stage has joined — which is what
+// makes reading the error afterwards safe.
+func TestFallibleSourceThroughAStage(t *testing.T) {
+	for _, c := range mapOps {
+		bubble(t, c.name, func(t *testing.T) {
+			cleanups := 0
+			rows := catena.Try[int](func(yield func(int, error) bool) {
+				defer func() { cleanups++ }()
+				for i := range 10 {
+					if i == 6 {
+						yield(0, errBoom)
+						return
+					}
+					if !yield(i, nil) {
+						return
+					}
+				}
+			})
+			var p probe
+			double := p.wrap(func(_ context.Context, v int) (int, error) {
+				time.Sleep(time.Second)
+				return v * 2, nil
+			})
+			var srcErr error
+			got, err := rows.UntilErr(&srcErr).Then(c.build(context.Background(), 4, double)).Collect()
+			slices.Sort(got)
+			// Every element before the failure went through; the
+			// failure itself is the source's, reported once.
+			if !slices.Equal(got, []int{0, 2, 4, 6, 8, 10}) || err != nil || !errors.Is(srcErr, errBoom) {
+				t.Fatalf("got %v, stage err %v, source err %v", got, err, srcErr)
+			}
+			if !p.joined() || cleanups != 1 {
+				t.Fatalf("joined=%v cleanups=%d", p.joined(), cleanups)
+			}
+		})
+	}
+
+	// Behind a producer stage the source runs on another goroutine, and
+	// writes the error there. The stage has joined it before returning.
+	bubble(t, "Buffer", func(t *testing.T) {
+		rows := catena.Try[int](func(yield func(int, error) bool) {
+			_ = yield(1, nil) && yield(2, nil) && yield(0, errBoom)
+		})
+		var srcErr error
+		got := rows.UntilErr(&srcErr).Then(parallel.Buffer[int](8)).Collect()
+		if !slices.Equal(got, []int{1, 2}) || !errors.Is(srcErr, errBoom) {
+			t.Fatalf("got %v, source err %v", got, srcErr)
+		}
+	})
+}
+
 func TestForEach(t *testing.T) {
 	ctx := context.Background()
 

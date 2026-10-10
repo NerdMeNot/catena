@@ -15,7 +15,7 @@
 // serves them and adds the switcher. Those directories are snapshots of a
 // release that no longer exists in this tree — nothing regenerates them,
 // which is why `scripts/sync.ts` clears only the directories it owns.
-// The procedure for archiving one is in docs/08-releasing.md.
+// The procedure for archiving one is in docs/09-releasing.md.
 import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
 import starlightVersions from 'starlight-versions'

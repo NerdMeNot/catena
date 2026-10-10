@@ -32,6 +32,23 @@ before — but it is no longer someone else's problem.
 - **Joins that drop nothing.** `Seq.LeftJoinBy` keeps a left element with
   no match and tells `combine` so; `Seq.GroupJoinBy` yields one result per
   left element with all of its matches together.
+- **Five ideas from `lo`, in catena's shape.**
+  - `Seq.FirstOr` and `Seq.LastOr` return a fallback when the sequence is
+    empty, so a lookup can sit inside an expression.
+  - `IsSorted`, `Seq.IsSortedBy` and `Seq.IsSortedWith` check order in one
+    pass with no buffer, stopping at the first pair out of order.
+  - `Duplicates` and `Seq.DuplicatesBy` yield each repeated value once, at
+    its second occurrence.
+  - `Seq.Sample` draws `n` elements uniformly at random in O(n) memory by
+    reservoir sampling — 803 KB → 456 B against collecting 100k elements
+    to shuffle them, and 4.4× faster. A seeded generator makes the choice
+    repeatable.
+- **`Try.UntilErr`** stops at the first error, as `Collect` does, but as
+  a sequence: the chain continues with the full `Seq` API and the error
+  is left where you asked, to be checked once the pipeline has run. It is
+  the policy exit `Try` was missing — `Ignore` keeps going and `Must`
+  panics — and it is how a fallible source feeds a stage that takes a
+  plain sequence, the concurrent ones included.
 - **`catena/parallel`: concurrency.** Six operators, each a stage for `Then`:
   - `Map`, `MapUnordered` and `ForEach` run a callback up to `n` at a
     time. The source stays on the consumer's goroutine; only the callback
@@ -62,10 +79,31 @@ before — but it is no longer someone else's problem.
   the replacement returns the same values of the same type. It is tagged
   on its own line, `lint/v0.x`.
 - Guides for [concurrency](docs/06-concurrency.md) and
-  [linting](docs/07-linting.md), reference pages for the two new
-  packages, and `concurrency` and `sources` examples.
+  [linting](docs/07-linting.md), and
+  [a lookup from lo, Kotlin and LINQ names](docs/08-coming-from.md) to
+  catena's, every entry of which a test checks against the library.
+  Reference pages for the two new packages, and `concurrency` and
+  `sources` examples.
 
 ### Changed
+
+- **Terminals and grouping operators are faster, some of them much.**
+  Every operator consumed its source through an adapter that made a nil
+  sequence behave as an empty one, and that made every source an opaque
+  function value. The call now goes through a method small enough to
+  inline, so a source built in the calling function is one the compiler
+  can see through. Measured interleaved against 1.4, over 100k elements:
+  `Sum` and `Contains` 71µs → 24µs, the speed of a hand-written loop;
+  `FoldBy` 16% faster; `GroupBy` and `JoinBy` 10–13%; single-stage `Map`
+  5%. Multi-stage pipelines are unchanged. No API or behaviour change.
+- **The published hand-loop baselines were too slow, and are corrected.**
+  They were written inline in the benchmark body, where nothing may be
+  optimised away, which made a plain loop look up to four times slower
+  than it is. Measured as functions of their own, the hand-written
+  4-stage pipeline takes 25µs, not 39µs — so a 4-stage catena pipeline is
+  about 10× a hand loop on trivial arithmetic, not 6.6× as the README and
+  the performance guide said. The library did not get slower; the earlier
+  comparison flattered it.
 
 - The 100% coverage gate now covers `parallel`, `source` and `sqlsource` as
   well as the core package, and the linter's module is gated to 100%
