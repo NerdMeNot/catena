@@ -31,6 +31,16 @@ Documentation only — no change to the library's API or behaviour.
   from before 1.4.
 - The guides point out that a method expression such as `Order.Country`
   is already a callback, which a test now pins down.
+- **Examples are complete.** In the `parallel` examples the function
+  being run concurrently is written out in the example rather than named
+  and left to the imagination, and operators can now carry several
+  examples: `Map` shows API calls, a link checker that keeps going past
+  failures, and CPU work; `ForEach` shows running three different calls
+  at once. Where an example in another package calls a shared helper, the
+  reference shows the helper's source beneath it.
+- The reference shows an operator's cautions as one list instead of a
+  stack of separate boxes, and the concurrency guide opens with a table
+  of what the package is used for, each row linked to a runnable example.
 
 ## [1.5.0] — 2026-10-10
 

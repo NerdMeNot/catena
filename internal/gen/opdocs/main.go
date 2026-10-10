@@ -30,8 +30,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // family is one page of the reference: a group of operators that answer
@@ -292,7 +295,12 @@ var families = []family{
 			"alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently while " +
 			"the source stays on the consumer's goroutine; `Buffer`, `ChunkedWithin` and " +
 			"`Merge` run the source itself on a goroutine of its own. The " +
-			"[concurrency guide](../06-concurrency.md) explains the two models.",
+			"[concurrency guide](../06-concurrency.md) explains the two models.\n\n" +
+			"Every example below is complete: the function being run concurrently is " +
+			"written out, because seeing that it is an ordinary function is most of " +
+			"understanding what this package is for. The ones that make HTTP requests " +
+			"talk to `shopURL`, a small server the tests start, so they are verified " +
+			"against real requests.",
 		Members: []string{
 			"parallel.Map", "parallel.MapUnordered", "parallel.ForEach",
 			"parallel.Buffer", "parallel.ChunkedWithin", "parallel.Merge",
@@ -509,6 +517,19 @@ func docText(g *ast.CommentGroup) string {
 type example struct {
 	Body   string
 	Output string
+	// Helpers is the source of the package-level functions and types the
+	// body calls that are declared alongside the examples. Shown under
+	// the example, so nothing on the page is a name without a meaning.
+	Helpers string
+	// More are further examples of the same operator: ExampleMap_errors
+	// is another example of Map, titled "Errors".
+	More []variant
+}
+
+// variant is an additional example of an operator, after its first.
+type variant struct {
+	Title string
+	example
 }
 
 // readExamples collects Example functions from the external test package.
@@ -522,6 +543,13 @@ func readExamples(fset *token.FileSet, dir string, from source, out map[string]e
 	if err != nil {
 		return err
 	}
+
+	type found struct {
+		subject, suffix string
+		ex              example
+	}
+	var examples []found
+	helpers := map[string]string{} // package-level name -> its declaration's source
 
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), "_test.go") {
@@ -537,24 +565,119 @@ func readExamples(fset *token.FileSet, dir string, from source, out map[string]e
 			return err
 		}
 		base := fset.File(file.Pos()).Base()
+		text := func(from, to token.Pos) string { return string(src[int(from)-base : int(to)-base]) }
+		// Only the example files' own declarations count as helpers: the
+		// other test files are full of fixtures with everyday names.
+		isExampleFile := strings.HasPrefix(e.Name(), "example")
+
 		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || !strings.HasPrefix(fn.Name.Name, "Example") {
-				continue
+			switch d := decl.(type) {
+			case *ast.GenDecl:
+				if !isExampleFile || d.Tok != token.TYPE {
+					continue
+				}
+				start := d.Pos()
+				if d.Doc != nil {
+					start = d.Doc.Pos()
+				}
+				for _, spec := range d.Specs {
+					helpers[spec.(*ast.TypeSpec).Name.Name] = text(start, d.End())
+				}
+			case *ast.FuncDecl:
+				if d.Recv != nil {
+					continue
+				}
+				if !strings.HasPrefix(d.Name.Name, "Example") {
+					if isExampleFile {
+						start := d.Pos()
+						if d.Doc != nil {
+							start = d.Doc.Pos()
+						}
+						helpers[d.Name.Name] = text(start, d.End())
+					}
+					continue
+				}
+				// ExampleSeq_Filter -> Seq.Filter; ExampleDistinct ->
+				// Distinct; ExampleMap_errors -> Map, variant "errors".
+				// A suffix starts in lower case, by godoc's convention.
+				rest := strings.TrimPrefix(d.Name.Name, "Example")
+				if rest == "" || strings.HasPrefix(rest, "_") {
+					continue // a package-level example
+				}
+				suffix := ""
+				if i := strings.LastIndex(rest, "_"); i >= 0 && i+1 < len(rest) && rest[i+1] >= 'a' && rest[i+1] <= 'z' {
+					rest, suffix = rest[:i], rest[i+1:]
+				}
+				body, output := splitExample(text(d.Body.Lbrace+1, d.Body.Rbrace))
+				examples = append(examples, found{
+					subject: from.Prefix + strings.Replace(rest, "_", ".", 1),
+					suffix:  suffix,
+					ex:      example{Body: body, Output: output},
+				})
 			}
-			subject := strings.TrimPrefix(fn.Name.Name, "Example")
-			if subject == "" {
-				continue // package-level Example
-			}
-			// ExampleSeq_Filter -> Seq.Filter; ExampleDistinct -> Distinct.
-			subject = from.Prefix + strings.Replace(subject, "_", ".", 1)
-			lo := int(fn.Body.Lbrace) - base + 1
-			hi := int(fn.Body.Rbrace) - base
-			body, output := splitExample(string(src[lo:hi]))
-			out[subject] = example{Body: body, Output: output}
 		}
 	}
+
+	// Variants attach to their operator's first example, in source order.
+	for _, f := range examples {
+		f.ex.Helpers = helpersUsed(f.ex.Body, helpers)
+		if f.suffix == "" {
+			more := out[f.subject].More
+			out[f.subject] = f.ex
+			if len(more) > 0 {
+				ex := out[f.subject]
+				ex.More = more
+				out[f.subject] = ex
+			}
+			continue
+		}
+		ex := out[f.subject]
+		ex.More = append(ex.More, variant{Title: variantTitle(f.suffix), example: f.ex})
+		out[f.subject] = ex
+	}
 	return nil
+}
+
+var identifier = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
+
+// helpersUsed returns the declarations of every helper the code mentions,
+// and of every helper those mention, each once, in the order first met.
+func helpersUsed(code string, helpers map[string]string) string {
+	var order []string
+	seen := map[string]bool{}
+	var visit func(string)
+	visit = func(text string) {
+		for _, name := range identifier.FindAllString(text, -1) {
+			decl, ok := helpers[name]
+			if !ok || seen[name] {
+				continue
+			}
+			seen[name] = true
+			order = append(order, decl)
+			visit(decl)
+		}
+	}
+	visit(code)
+	// A type declaration that names several types is one declaration.
+	return strings.Join(slices.Compact(order), "\n\n")
+}
+
+// variantTitle turns an example's suffix into words: differentCalls ->
+// "Different calls".
+func variantTitle(suffix string) string {
+	var b strings.Builder
+	for i, r := range suffix {
+		switch {
+		case i == 0:
+			b.WriteRune(unicode.ToUpper(r))
+		case unicode.IsUpper(r):
+			b.WriteByte(' ')
+			b.WriteRune(unicode.ToLower(r))
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // splitExample separates an Example's statements from the `// Output:`
@@ -648,11 +771,37 @@ func render(f family, ops map[string]operator, examples map[string]example) (str
 		if s := summary(op.Doc); s != "" {
 			fmt.Fprintf(&b, "%s\n\n", s)
 		}
-		for _, n := range notes(op.Doc) {
-			fmt.Fprintf(&b, ":::caution\n%s\n:::\n\n", n)
+		// One block, however many notes: a stack of separate warnings
+		// reads as alarm, where these are a short list of facts.
+		switch ns := notes(op.Doc); len(ns) {
+		case 0:
+		case 1:
+			fmt.Fprintf(&b, ":::caution\n%s\n:::\n\n", ns[0])
+		default:
+			b.WriteString(":::caution\n")
+			for _, n := range ns {
+				fmt.Fprintf(&b, "- %s\n", n)
+			}
+			b.WriteString(":::\n\n")
 		}
-		fmt.Fprintf(&b, "```go\n%s\n```\n\n", ex.Body)
-		fmt.Fprintf(&b, "```\n%s\n```\n", ex.Output)
+		renderExample(&b, ex)
+		for _, v := range ex.More {
+			if v.Output == "" {
+				return "", 0, fmt.Errorf("the %q example for %s has no `// Output:` comment, so nothing verifies it", v.Title, name)
+			}
+			fmt.Fprintf(&b, "\n### %s\n\n", v.Title)
+			renderExample(&b, v.example)
+		}
 	}
 	return b.String(), len(f.Members), nil
+}
+
+// renderExample writes an example's code, what it prints, and — folded
+// away, since most readers will not need them — the helpers it calls.
+func renderExample(b *strings.Builder, ex example) {
+	fmt.Fprintf(b, "```go\n%s\n```\n\n", ex.Body)
+	fmt.Fprintf(b, "```\n%s\n```\n", ex.Output)
+	if ex.Helpers != "" {
+		fmt.Fprintf(b, "\n<details>\n<summary>The helpers this example calls</summary>\n\n```go\n%s\n```\n\n</details>\n", ex.Helpers)
+	}
 }

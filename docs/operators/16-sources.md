@@ -46,11 +46,8 @@ func Paginate[T, C any](first C, fetch func(cursor C) (items []T, next C, more b
 Paginate yields the items of a paginated source, one page at a time. fetch is given a cursor — first, to begin with — and returns that page's items, the cursor of the next page, and whether there is one. A page is fetched only when the one before it has been yielded in full, so a downstream Take(n) fetches no more pages than it needs. A failed fetch is yielded as (zero, err) and ends the sequence, its items ignored: the way forward is not known. Each iteration starts again from first.
 
 :::caution
-Holds one page in memory
-:::
-
-:::caution
-A source that always reports another page is infinite, and one that reports empty pages without end never yields, so nothing downstream — not even Take — can stop it: bound that in fetch
+- Holds one page in memory
+- A source that always reports another page is infinite, and one that reports empty pages without end never yields, so nothing downstream — not even Take — can stop it: bound that in fetch
 :::
 
 ```go
