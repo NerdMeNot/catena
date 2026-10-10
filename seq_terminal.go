@@ -4,7 +4,7 @@ package catena
 // the rest of the ecosystem (Seq, Pull, ToChan). Folds and grouping live
 // in seq_fold.go; ordered and numeric aggregation in seq_aggregate.go.
 //
-// Terminals consume the source by direct invocation (src(s)(func ...))
+// Terminals consume the source by direct invocation (s.each(func ...))
 // rather than range statements, for the same reason the operators in
 // seq.go do — it skips the compiler's rangefunc state machine.
 
@@ -18,7 +18,7 @@ import (
 // ⚠ Full drain.
 func (s Seq[T]) Collect() []T {
 	var g gatherer[T]
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		g.add(v)
 		return true
 	})
@@ -74,7 +74,7 @@ func (s Seq[T]) ToChan(ctx context.Context) <-chan T {
 
 // ForEach calls f on every element. ⚠ Full drain.
 func (s Seq[T]) ForEach(f func(T)) {
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		f(v)
 		return true
 	})
@@ -83,7 +83,7 @@ func (s Seq[T]) ForEach(f func(T)) {
 // ForEachIndexed calls f(index, element) on every element. ⚠ Full drain.
 func (s Seq[T]) ForEachIndexed(f func(int, T)) {
 	i := 0
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		f(i, v)
 		i++
 		return true
@@ -94,7 +94,7 @@ func (s Seq[T]) ForEachIndexed(f func(int, T)) {
 // non-nil error; nil if the sequence drains clean.
 func (s Seq[T]) ForEachErr(f func(T) error) error {
 	var err error
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		err = f(v)
 		return err == nil
 	})
@@ -103,14 +103,14 @@ func (s Seq[T]) ForEachErr(f func(T) error) error {
 
 // Drain consumes the sequence for its side effects. ⚠ Full drain.
 func (s Seq[T]) Drain() {
-	src(s)(func(T) bool { return true })
+	s.each(func(T) bool { return true })
 }
 
 // First returns the first element.
 func (s Seq[T]) First() (T, bool) {
 	var got T
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		got, found = v, true
 		return false
 	})
@@ -124,7 +124,7 @@ func (s Seq[T]) First() (T, bool) {
 // FirstOr returns the first element, or fallback if the sequence is
 // empty — First for use inside an expression.
 func (s Seq[T]) FirstOr(fallback T) T {
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		fallback = v
 		return false
 	})
@@ -134,7 +134,7 @@ func (s Seq[T]) FirstOr(fallback T) T {
 // LastOr returns the final element, or fallback if the sequence is empty.
 // ⚠ Full drain.
 func (s Seq[T]) LastOr(fallback T) T {
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		fallback = v
 		return true
 	})
@@ -148,7 +148,7 @@ func (s Seq[T]) LastOr(fallback T) T {
 func (s Seq[T]) IsSortedWith(cmp func(a, b T) int) bool {
 	var prev T
 	have, sorted := false, true
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if have && cmp(prev, v) > 0 {
 			sorted = false
 			return false
@@ -163,7 +163,7 @@ func (s Seq[T]) IsSortedWith(cmp func(a, b T) int) bool {
 func (s Seq[T]) Last() (T, bool) {
 	var last T
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		last, found = v, true
 		return true
 	})
@@ -175,7 +175,7 @@ func (s Seq[T]) Last() (T, bool) {
 func (s Seq[T]) Single() (T, bool) {
 	var got T
 	n := 0
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		got = v
 		n++
 		return n < 2
@@ -193,7 +193,7 @@ func (s Seq[T]) ElementAt(i int) (T, bool) {
 	var got T
 	found := false
 	if i >= 0 {
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			if i == 0 {
 				got, found = v, true
 				return false
@@ -213,7 +213,7 @@ func (s Seq[T]) ElementAt(i int) (T, bool) {
 func (s Seq[T]) Find(pred func(T) bool) (T, bool) {
 	var got T
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if pred(v) {
 			got, found = v, true
 			return false
@@ -231,7 +231,7 @@ func (s Seq[T]) Find(pred func(T) bool) (T, bool) {
 func (s Seq[T]) FindLast(pred func(T) bool) (T, bool) {
 	var last T
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if pred(v) {
 			last, found = v, true
 		}
@@ -244,7 +244,7 @@ func (s Seq[T]) FindLast(pred func(T) bool) (T, bool) {
 // none.
 func (s Seq[T]) FindIndex(pred func(T) bool) int {
 	i, at := 0, -1
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if pred(v) {
 			at = i
 			return false
@@ -260,7 +260,7 @@ func (s Seq[T]) FindIndex(pred func(T) bool) int {
 func (s Seq[T]) FindMap[U any](f func(T) (U, bool)) (U, bool) {
 	var got U
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if u, ok := f(v); ok {
 			got, found = u, true
 			return false
@@ -277,7 +277,7 @@ func (s Seq[T]) FindMap[U any](f func(T) (U, bool)) (U, bool) {
 // Any reports whether pred admits any element; stops at the first match.
 func (s Seq[T]) Any(pred func(T) bool) bool {
 	found := false
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		found = pred(v)
 		return !found
 	})
@@ -288,7 +288,7 @@ func (s Seq[T]) Any(pred func(T) bool) bool {
 // counterexample. Vacuously true on empty input.
 func (s Seq[T]) All(pred func(T) bool) bool {
 	ok := true
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		ok = pred(v)
 		return ok
 	})
@@ -303,7 +303,7 @@ func (s Seq[T]) None(pred func(T) bool) bool {
 // Count returns the number of elements. ⚠ Full drain.
 func (s Seq[T]) Count() int {
 	n := 0
-	src(s)(func(T) bool {
+	s.each(func(T) bool {
 		n++
 		return true
 	})
@@ -313,7 +313,7 @@ func (s Seq[T]) Count() int {
 // CountWhere returns the number of elements pred admits. ⚠ Full drain.
 func (s Seq[T]) CountWhere(pred func(T) bool) int {
 	n := 0
-	src(s)(func(v T) bool {
+	s.each(func(v T) bool {
 		if pred(v) {
 			n++
 		}
@@ -326,7 +326,7 @@ func (s Seq[T]) CountWhere(pred func(T) bool) int {
 // consuming one element — on a single-pass source that element is lost.
 func (s Seq[T]) IsEmpty() bool {
 	empty := true
-	src(s)(func(T) bool {
+	s.each(func(T) bool {
 		empty = false
 		return false
 	})

@@ -187,7 +187,7 @@ func Cycle[T any](s Seq[T]) Seq[T] {
 	return func(yield func(T) bool) {
 		var g gatherer[T]
 		stopped := false
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			g.add(v)
 			if !yield(v) {
 				stopped = true

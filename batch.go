@@ -19,7 +19,7 @@ func Chunked[T any](s Seq[T], n int) Seq[[]T] {
 	return func(yield func([]T) bool) {
 		chunk := make([]T, 0, n)
 		stopped := false
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			chunk = append(chunk, v)
 			if len(chunk) < n {
 				return true
@@ -46,7 +46,7 @@ func ChunkedBy[T any, K comparable](s Seq[T], sel func(T) K) Seq[[]T] {
 		var chunk []T
 		var prev K
 		stopped := false
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			k := sel(v)
 			if len(chunk) > 0 && k != prev {
 				if !yield(chunk) {
@@ -76,7 +76,7 @@ func Windowed[T any](s Seq[T], size, step int) Seq[[]T] {
 	return func(yield func([]T) bool) {
 		win := make([]T, 0, size)
 		skip := 0
-		src(s)(func(v T) bool {
+		s.each(func(v T) bool {
 			if skip > 0 {
 				skip--
 				return true
@@ -107,7 +107,26 @@ func Windowed[T any](s Seq[T], size, step int) Seq[[]T] {
 // hangs on infinite input. A package function for the same instantiation-
 // cycle reason as Chunked: Seq2[K, []T] leads back to Seq[[]T].
 func GroupedBy[T any, K comparable](s Seq[T], sel func(T) K) Seq2[K, []T] {
-	return s.FoldedBy(sel,
-		func(K) []T { return nil },
-		func(bucket []T, v T) []T { return append(bucket, v) })
+	return func(yield func(K, []T) bool) {
+		index := make(map[K]int)
+		var keys []K
+		var buckets [][]T
+		s.each(func(v T) bool {
+			k := sel(v)
+			i, ok := index[k]
+			if !ok {
+				i = len(keys)
+				index[k] = i
+				keys = append(keys, k)
+				buckets = append(buckets, nil)
+			}
+			buckets[i] = append(buckets[i], v)
+			return true
+		})
+		for i, k := range keys {
+			if !yield(k, buckets[i]) {
+				return
+			}
+		}
+	}
 }

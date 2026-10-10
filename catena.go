@@ -134,13 +134,40 @@ type Integer interface {
 // Self is the identity selector: catena.Flatten(s) is s.FlatMap(Self).
 func Self[T any](v T) T { return v }
 
-// emptyFn is the shared empty iteration body; src returns it for nil
-// sequences so every operator is nil-safe without per-operator guards.
+// emptyFn is the shared empty iteration body, which src returns for a nil
+// sequence.
 func emptyFn[T any](yield func(T) bool) { _ = yield }
 
 func emptyFn2[K, V any](yield func(K, V) bool) { _ = yield }
 
-// src adapts a possibly-nil Seq to a ranged iter.Seq: nil is empty.
+// each invokes s with yield, treating a nil sequence as empty. It is how
+// every operator consumes its source: a plain call, not a range statement
+// (see seq.go), and a call the compiler can see through — each is small
+// enough to inline, which leaves `s(yield)` at the call site, where a
+// source the caller built in the same function is a known closure rather
+// than an opaque function value. Routing the call through src, which
+// returns one of two functions, hid that.
+func (s Seq[T]) each(yield func(T) bool) {
+	if s != nil {
+		s(yield)
+	}
+}
+
+func (s Seq2[K, V]) each(yield func(K, V) bool) {
+	if s != nil {
+		s(yield)
+	}
+}
+
+func (t Try[T]) each(yield func(T, error) bool) {
+	if t != nil {
+		t(yield)
+	}
+}
+
+// src adapts a possibly-nil Seq to an iter.Seq value: nil is empty. For
+// where a function value is needed — conversion, iter.Pull — rather than
+// a call; operators consuming their source use each.
 func src[T any](s Seq[T]) iter.Seq[T] {
 	if s == nil {
 		return emptyFn[T]
