@@ -47,20 +47,30 @@ existing tag).
 
 ## The linter
 
-`lint/` is a module of its own, so it has its own tags: `lint/v0.1.0`, not
-`v0.1.0`. Go finds a nested module's versions by that prefix. It is
-released when its checks change, independently of the library, and it
-needs no `Version` constant or changelog section of its own — its changes
-are recorded in `CHANGELOG.md` under the library release they landed with.
+`lint/` is a module of its own, so Go finds its versions under a prefix:
+`lint/v1.5.0`, not `v1.5.0`. It is versioned in lockstep with the
+library — every library release tags the linter with the same number, at
+the same commit, whether or not the linter changed. One number to
+remember, and the linter for a given catena is never a lookup.
+
+Once the library's release has published, tag the linter on the commit
+the library's tag points at:
 
 ```sh
-git tag -a lint/v0.1.0 -m "catena lint v0.1.0"
-git push origin lint/v0.1.0
+git tag -a lint/v1.5.0 -m "catena lint v1.5.0" 'v1.5.0^{commit}'
+git push origin lint/v1.5.0
 ```
 
-The same permanence applies: the proxy caches a `lint/` tag exactly as it
-caches any other. The library's release gate runs the linter's tests, so
-a library tag is never cut with the linter broken against it.
+That tag does not start the `Release` workflow, which matches library
+tags only; there is nothing for it to publish, and the library's release
+gate has already run the linter's tests on that commit. The linter needs
+no `Version` constant or changelog section of its own: its changes are
+recorded in `CHANGELOG.md` under the release they landed with.
+
+The same permanence applies — the proxy caches a `lint/` tag exactly as
+it caches any other — and so does semantic versioning. The linter is past
+v1, so a minor release may add a check or change what a report offers,
+and a patch may only correct one.
 
 ## The website
 

@@ -84,10 +84,19 @@ supports; `go vet` has none, and each check can be switched off by name —
 
 ## Versions
 
-The linter is tagged on its own line, `lint/v0.x.y`, and is still at v0:
-checks may be added, and a report may gain or lose a fix, in a minor
-version. It matches catena by package path rather than by importing it,
-so one linter version works across catena releases; a check for an
-operator your catena version does not have simply never fires.
+The linter carries the library's version: `lint/v1.5.0` was cut from the
+same commit as `v1.5.0`, and each library release tags the linter with
+it. So the linter that knows your catena's operators is the one with
+your catena's version number.
+
+What a minor version may change is the set of reports: a new check, or a
+report gaining or losing a fix. If `go vet` gates your CI, pin the linter
+— `catenalint@v1.5.0` rather than `@latest` — so that a new check arrives
+when you choose to take it. A patch version fixes a wrong report and adds
+none.
+
+It matches catena by package path rather than by importing it, so a newer
+linter still works on an older catena; a check for an operator your
+version does not have simply never fires.
 
 The library's own examples are linted in CI and must come back clean.
