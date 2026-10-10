@@ -20,13 +20,13 @@ func Buffer[T any](n int) func(catena.Seq[T]) catena.Seq[T] {
 	return func(s catena.Seq[T]) catena.Seq[T] {
 		return func(yield func(T) bool) {
 			f := start(n, s)
-			defer f.stop()
+			defer f.stop() // if the consumer panics
 			for v := range f.ch {
 				if !yield(v) {
-					return
+					break
 				}
 			}
-			f.reraise()
+			f.finish()
 		}
 	}
 }
@@ -43,13 +43,13 @@ func Buffer[T any](n int) func(catena.Seq[T]) catena.Seq[T] {
 func Merge[T any](seqs ...catena.Seq[T]) catena.Seq[T] {
 	return func(yield func(T) bool) {
 		f := start(0, seqs...)
-		defer f.stop()
+		defer f.stop() // if the consumer panics
 		for v := range f.ch {
 			if !yield(v) {
-				return
+				break
 			}
 		}
-		f.reraise()
+		f.finish()
 	}
 }
 
@@ -69,7 +69,7 @@ func ChunkedWithin[T any](n int, d time.Duration) func(catena.Seq[T]) catena.Seq
 	return func(s catena.Seq[T]) catena.Seq[[]T] {
 		return func(yield func([]T) bool) {
 			f := start(0, s)
-			defer f.stop()
+			defer f.stop() // if the consumer panics
 			timer := time.NewTimer(d)
 			timer.Stop()
 			defer timer.Stop()
@@ -82,7 +82,7 @@ func ChunkedWithin[T any](n int, d time.Duration) func(catena.Seq[T]) catena.Seq
 				select {
 				case v, ok := <-f.ch:
 					if !ok {
-						f.reraise()
+						f.finish() // a source that panicked loses its partial chunk
 						if len(chunk) > 0 {
 							yield(chunk)
 						}
@@ -99,6 +99,7 @@ func ChunkedWithin[T any](n int, d time.Duration) func(catena.Seq[T]) catena.Seq
 				case <-deadline:
 				}
 				if !yield(chunk) {
+					f.finish()
 					return
 				}
 				chunk = nil
@@ -163,9 +164,12 @@ func (f *feed[T]) stop() {
 	f.wg.Wait()
 }
 
-// reraise panics with a source's panic value, if one panicked. It may
-// only be called once ch is closed.
-func (f *feed[T]) reraise() {
+// finish stops the producers and then re-raises a source's panic, if one
+// panicked — including one that panicked only on being told to stop, as a
+// source's own cleanup can. It is how every exit but a consumer's panic
+// ends: that one keeps its own panic, and only stops.
+func (f *feed[T]) finish() {
+	f.stop()
 	for _, crash := range f.crashes {
 		if crash != nil {
 			panic(crash)

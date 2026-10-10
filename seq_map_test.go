@@ -360,4 +360,11 @@ func TestGroupJoinByMatches(t *testing.T) {
 	if !slices.Equal(got[0], []int{10, 11}) || got[1] != nil || &got[0][0] != &got[2][0] {
 		t.Fatalf("matches = %v", got)
 	}
+	// Shared elements, but not shared room: appending to one left
+	// element's matches must copy rather than write into another's.
+	for i, us := range got {
+		if cap(us) != len(us) {
+			t.Fatalf("matches %d has spare capacity %d", i, cap(us)-len(us))
+		}
+	}
 }

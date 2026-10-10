@@ -222,7 +222,7 @@ func (s Seq[T]) GroupJoinBy[U any, K comparable, R any](
 ) Seq[R]
 ```
 
-GroupJoinBy pairs each element of s with all the elements of other sharing its key, yielding combine exactly once per left element — the one-to-many join that keeps the many together. matches is in right encounter order and nil when nothing matches. It is shared by every left element with that key: retain it freely, but do not modify it.
+GroupJoinBy pairs each element of s with all the elements of other sharing its key, yielding combine exactly once per left element — the one-to-many join that keeps the many together. matches is in right encounter order and nil when nothing matches. Its elements are shared by every left element with that key: retain it and append to it freely, but do not assign to its elements.
 
 :::caution
 Buffers all of other before the first emission
@@ -259,7 +259,7 @@ fmt.Println(customers.GroupJoinBy(orders,
 func MergeSorted[T cmp.Ordered](seqs ...Seq[T]) Seq[T]
 ```
 
-MergeSorted merges already-sorted sequences into one sorted sequence; equal elements keep argument order. Lazy, holding one element per input: see Seq.MergeSortedWith, which this is for an ordered T.
+MergeSorted merges already-sorted sequences into one sorted sequence; equal elements keep argument order. Lazy, holding one element of each input after the first. Every input but the first is consumed through iter.Pull, at a coroutine switch per element, so put the longest first: see Seq.MergeSortedWith, which this is for an ordered T.
 
 ```go
 // Inputs that are each already sorted merge lazily, holding one
@@ -279,7 +279,7 @@ fmt.Println(catena.MergeSorted(odds, evens).Take(6).Collect())
 func (s Seq[T]) MergeSortedWith(cmp func(a, b T) int, others ...Seq[T]) Seq[T]
 ```
 
-MergeSortedWith merges s with others into one sequence ordered by cmp, given that every input is already ordered by cmp; on unsorted input the output is simply not sorted. Equal elements keep input order, the receiver first. Lazy: it holds one element per input and consumes each input at most one element past what it has yielded, at a cost of one comparison per input per element. Every input is consumed through iter.Pull (its cleanup always runs). catena.MergeSorted is the no-comparator form, for an ordered T.
+MergeSortedWith merges s with others into one sequence ordered by cmp, given that every input is already ordered by cmp; on unsorted input the output is simply not sorted. Equal elements keep input order, the receiver first. Lazy: it holds one element of each of others, and consumes each of them at most one element past what it has yielded. The receiver is consumed directly; each of others is consumed through iter.Pull (its cleanup always runs), which costs a coroutine switch per element — tens of nanoseconds — so put the longest input first. catena.MergeSorted is the no-comparator form, for an ordered T.
 
 ```go
 // The comparator form, for any element type. Equal elements keep

@@ -23,6 +23,17 @@ a `Try[Body]`, so everything in [error handling](/guides/error-handling/)
 applies unchanged: `Collect` stops at the first failure, `CollectAll`
 gathers them, `Ignore` skips.
 
+## When it is worth it
+
+A stage starts a goroutine per element. With a callback that does nothing
+that costs about 0.3µs an element — the same as a hand-written loop with
+a semaphore, and some two hundred times what a plain `Map` costs. So the
+rule is the usual one: use it for callbacks that *wait* — a request, a
+query, a file — where eight at a time is eight times the throughput, and
+not for callbacks that compute something small, where the goroutine costs
+more than the work. The numbers are in the
+[performance guide](/guides/performance/).
+
 ## Stages and `Then`
 
 A package cannot add methods to another package's type, so `par` cannot

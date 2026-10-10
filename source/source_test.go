@@ -46,7 +46,9 @@ func TestLinesSplitting(t *testing.T) {
 		"a\r\nb\r\n":   {"a", "b"},
 		"a\n\nb\n":     {"a", "", "b"},
 		"\n":           {""},
-		"a\rb\n":       {"a\rb"}, // a lone CR is not a line ending
+		"a\rb\n":       {"a\rb"},     // a lone CR is not a line ending
+		"a\nb\r":       {"a", "b\r"}, // nor is one at the very end
+		"a\r\n\r":      {"a", "\r"},
 		long + "\nend": {long, "end"},
 	} {
 		tr := text(in)

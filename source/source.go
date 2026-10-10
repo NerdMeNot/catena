@@ -49,7 +49,11 @@ func Lines(open func() (io.ReadCloser, error)) catena.Try[string] {
 				return
 			}
 			if err == nil || line != "" {
-				line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+				// Only a CR that is part of a line ending goes: a
+				// last line cut short after its CR keeps it.
+				if body, ended := strings.CutSuffix(line, "\n"); ended {
+					line = strings.TrimSuffix(body, "\r")
+				}
 				if !yield(line, nil) {
 					return
 				}
@@ -69,7 +73,9 @@ func Lines(open func() (io.ReadCloser, error)) catena.Try[string] {
 // is yielded as (zero, err) and ends the sequence, its items ignored: the
 // way forward is not known. Each iteration starts again from first. ⚠
 // Holds one page in memory. ⚠ A source that always reports another page
-// is infinite.
+// is infinite, and one that reports empty pages without end never yields,
+// so nothing downstream — not even Take — can stop it: bound that in
+// fetch.
 func Paginate[T, C any](first C, fetch func(cursor C) (items []T, next C, more bool, err error)) catena.Try[T] {
 	return func(yield func(T, error) bool) {
 		cursor := first

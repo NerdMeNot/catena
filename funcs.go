@@ -51,7 +51,9 @@ func Dedupe[T comparable](s Seq[T]) Seq[T] {
 }
 
 // MergeSorted merges already-sorted sequences into one sorted sequence;
-// equal elements keep argument order. Lazy, holding one element per input:
+// equal elements keep argument order. Lazy, holding one element of each
+// input after the first. Every input but the first is consumed through
+// iter.Pull, at a coroutine switch per element, so put the longest first:
 // see Seq.MergeSortedWith, which this is for an ordered T.
 func MergeSorted[T cmp.Ordered](seqs ...Seq[T]) Seq[T] {
 	return mergeSorted(cmp.Compare[T], seqs)

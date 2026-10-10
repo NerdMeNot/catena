@@ -3,15 +3,16 @@ package lint
 import (
 	"fmt"
 	"go/ast"
+	"go/types"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
 )
 
-// MinMax reports a full sort used to find one element. The aggregate
-// returns the same element — including which of several equal ones — in
-// one pass and no buffer.
+// MinMax reports a full sort used to find one element, wherever an
+// aggregate returns the same element — including which of several equal
+// ones — in one pass and no buffer. Where it would not, it stays silent.
 var MinMax = &analysis.Analyzer{
 	Name:     "catenaminmax",
 	Doc:      "report Sorted(…).First() and its kin, which sort everything to find one element; Min, Max and their By and With forms do it in one pass",
@@ -32,9 +33,15 @@ func runMinMax(pass *analysis.Pass) (any, error) {
 
 		var was, better, fixed string
 		if u, ok := unary(info, sorted); ok && (u.name == "Sorted" || u.name == "SortedDesc") {
-			// Values of an ordered type that compare equal are
-			// interchangeable, so either end of either sort has an
-			// aggregate.
+			// First is always the aggregate: a stable sort puts the
+			// earliest of several equal elements first, and that is
+			// the one Min and Max return. Last is the latest of them,
+			// which is the same value only where equal means
+			// identical — true of integers and strings, not of
+			// floats, where -0 == +0 and NaNs differ in payload.
+			if !first && !equalMeansIdentical(info, u.arg) {
+				return
+			}
 			better = "Max"
 			if (u.name == "Sorted") == first {
 				better = "Min"
@@ -70,4 +77,17 @@ func runMinMax(pass *analysis.Pass) (any, error) {
 		})
 	})
 	return nil, nil
+}
+
+// equalMeansIdentical reports whether two elements of the sequence seq
+// that compare equal are certainly the same value. It is true of the
+// integer and string types, and false of the floats and of anything it
+// cannot see through, such as a type parameter.
+func equalMeansIdentical(info *types.Info, seq ast.Expr) bool {
+	named, ok := types.Unalias(info.TypeOf(seq)).(*types.Named)
+	if !ok || named.TypeArgs().Len() != 1 {
+		return false // a bare function literal passed as a sequence
+	}
+	basic, ok := named.TypeArgs().At(0).Underlying().(*types.Basic)
+	return ok && basic.Info()&types.IsFloat == 0
 }

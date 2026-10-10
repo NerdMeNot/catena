@@ -189,6 +189,25 @@ bounded by distinct keys where `GroupBy` retains every element, and
   `iter.Pull` — a runtime coroutine. A zip pipeline measures ~35ns per
   element end to end, which the coroutine dominates. There is no
   cheaper way to do it; the cost is documented rather than hidden.
+- **`MergeSorted`** has the same cost for the same reason. The first
+  input is driven directly, like any source; every other input has to be
+  suspended between elements, so each of *their* elements costs a
+  coroutine switch. Two evenly interleaved inputs of 50k each merge in
+  2.0ms against 0.08ms for a hand-written merge of two slices — about
+  20ns per element, against under one. That is the price of merging
+  streams rather than slices, and it is why the longest input should go
+  first: its elements are the ones that cost nothing.
+  (`BenchmarkMergeSorted_*`.)
+- **`par`** starts a goroutine per element, which is what its callbacks
+  need and what a hand-written concurrent loop does too. With a callback
+  that does nothing, `par.Map` over 10k elements takes 3.2ms — about
+  0.3µs an element — against 3.7ms for the hand-written loop (a
+  goroutine per element behind a semaphore, results into a preallocated
+  slice) and 0.02ms for doing it sequentially. So `par` costs nothing over
+  writing the concurrency yourself, and concurrency costs about 0.3µs an
+  element over not having any: worth it for a callback that waits on
+  I/O, a loss for one that does arithmetic. `Buffer` costs one channel
+  hand-off, about 50ns an element. (`par/bench_test.go`.)
 - **`Chunked`/`ChunkedBy`/`Windowed`** allocate a fresh slice per emitted
   batch, always. Reusing the buffer would corrupt data for anyone who
   retains a batch; the allocation is the price of that guarantee being
@@ -197,4 +216,4 @@ bounded by distinct keys where `GroupBy` retains every element, and
   construction, and streaming operators allocate nothing per element —
   enforced per operator by the conformance suite's allocation checks.
 
-Run everything yourself: `go test -bench . -benchmem`.
+Run everything yourself: `go test -bench . -benchmem ./...`.

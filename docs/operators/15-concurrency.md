@@ -8,7 +8,7 @@ The operators that start goroutines, in the `catena/par` package — the core pa
 func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U]
 ```
 
-Map returns a stage that yields f applied to each element, running up to n calls at once and yielding results in source order. A failed call yields (zero, err) and the stage continues. When ctx is done the stage stops consuming, yields (zero, ctx.Err()) once, and ends; f receives a context that is also cancelled the moment the consumer stops. The source runs on the consumer's goroutine. Panics if n <= 0.
+Map returns a stage that yields f applied to each element, running up to n calls at once and yielding results in source order. A failed call yields (zero, err) and the stage continues. When ctx is done the stage stops consuming, yields (zero, ctx.Err()) once in place of any results it still held, and ends; over an empty source it yields nothing. f receives a context that is also cancelled the moment the consumer stops. The source runs on the consumer's goroutine. Panics if n <= 0.
 
 :::caution
 Starts up to n goroutines per iteration, all joined before it returns
@@ -19,7 +19,7 @@ Consumes at most n elements beyond those yielded, and holds their results: one s
 :::
 
 :::caution
-A finished result is delivered only when the source next yields or ends, so behind a slow live source it waits for the next element
+A finished result is delivered, and a done ctx is noticed, only when the source next yields or ends: behind a slow live source both wait for the next element
 :::
 
 ```go
@@ -80,7 +80,7 @@ fmt.Println(got)
 func ForEach[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Seq[T]) error
 ```
 
-ForEach returns a terminal stage that calls f for each element, up to n calls at once, and returns the first error to occur — a call's own, or ctx.Err() — or nil once every call has succeeded. On an error the remaining calls are cancelled through their context and joined before it returns. Panics if n <= 0.
+ForEach returns a terminal stage that calls f for each element, up to n calls at once, and returns the first error to occur — a call's own, or ctx.Err() — or nil once every call has succeeded. "First" is first in time, not in source order. A done ctx is an error even if every call that ran succeeded. On an error the remaining calls are cancelled through their context and joined before it returns. Panics if n <= 0.
 
 :::caution
 Starts up to n goroutines, all joined before it returns
