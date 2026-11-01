@@ -231,6 +231,102 @@ func ExampleForEach_differentCalls() {
 	// Output: ada [1001 1004] monitor <nil>
 }
 
+func ExampleMapTry() {
+	// The product ids come from a file someone typed, so parsing them can
+	// fail — and that should not stop the lookups for the ids that did
+	// parse. MapTry takes the Try as it is: a bad id is never requested,
+	// and arrives in its place among the results.
+	type Product struct {
+		ID   int
+		Name string
+	}
+	getProduct := func(ctx context.Context, id int) (Product, error) {
+		var p Product
+		url := fmt.Sprintf("%s/products/%d", shopURL, id)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return p, err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return p, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return p, fmt.Errorf("product %d: %s", id, resp.Status)
+		}
+		return p, json.NewDecoder(resp.Body).Decode(&p)
+	}
+
+	ids := catena.Of("101", "1O2", "103", "999").MapErr(strconv.Atoi)
+	products, problems := ids.
+		Then(parallel.MapTry(context.Background(), 8, getProduct)).
+		CollectAll()
+	fmt.Println(products)
+	for _, err := range problems {
+		fmt.Println(err)
+	}
+	// Output:
+	// [{101 keyboard} {103 monitor}]
+	// strconv.Atoi: parsing "1O2": invalid syntax
+	// product 999: 404 Not Found
+}
+
+func ExampleMapUnorderedTry() {
+	// Warm the cache for every product id in a list, in whatever order
+	// the responses come back. A malformed id is counted as skipped
+	// without ever being requested.
+	warm := func(ctx context.Context, id int) (int, error) {
+		url := fmt.Sprintf("%s/products/%d", shopURL, id)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return 0, err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		resp.Body.Close()
+		return id, nil
+	}
+
+	ids := catena.Of("104", "101", "x103", "102").MapErr(strconv.Atoi)
+	warmed, skipped := ids.
+		Then(parallel.MapUnorderedTry(context.Background(), 4, warm)).
+		CollectAll()
+	fmt.Println("warmed", len(warmed), "skipped", len(skipped))
+	// Output: warmed 3 skipped 1
+}
+
+func ExampleForEachTry() {
+	// Purge the edge nodes named in a config file, four at a time. A
+	// malformed name is an error like a failed purge: it is returned, and
+	// the purges still running are cancelled and waited for first.
+	purge := func(ctx context.Context, node string) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, shopURL+"/purge/"+node, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("%s: %w", node, err)
+		}
+		resp.Body.Close()
+		return nil
+	}
+	valid := func(name string) (string, error) {
+		if strings.ContainsAny(name, " /") {
+			return "", fmt.Errorf("bad node name %q", name)
+		}
+		return name, nil
+	}
+
+	nodes := catena.Of("fra1", "iad2", "sin 1", "syd1").MapErr(valid)
+	err := nodes.Then(parallel.ForEachTry(context.Background(), 4, purge))
+	fmt.Println(err)
+	// Output: bad node name "sin 1"
+}
+
 func ExampleBuffer() {
 	// Archiving a log: reading and splitting it into lines is work, and
 	// so is compressing them. In one loop they take turns. Behind a

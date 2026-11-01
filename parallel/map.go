@@ -23,7 +23,7 @@ import (
 // for the next element.
 // Panics if n <= 0.
 func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U] {
-	return mapStage("Map", ctx, n, f, true)
+	return fromSeq(mapStage("Map", ctx, n, f, true))
 }
 
 // MapUnordered is Map yielding each result as soon as its call finishes
@@ -33,7 +33,7 @@ func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, er
 // beyond those yielded. ⚠ A finished result is delivered only when the
 // source next yields or ends. Panics if n <= 0.
 func MapUnordered[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U] {
-	return mapStage("MapUnordered", ctx, n, f, false)
+	return fromSeq(mapStage("MapUnordered", ctx, n, f, false))
 }
 
 // ForEach returns a terminal stage that calls f for each element, up to n
@@ -44,32 +44,87 @@ func MapUnordered[T, U any](ctx context.Context, n int, f func(context.Context, 
 // through their context and joined before it returns. ⚠ Starts up to n goroutines, all joined before it returns.
 // ⚠ Full drain on success. Panics if n <= 0.
 func ForEach[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Seq[T]) error {
-	stage := mapStage("ForEach", ctx, n, func(ctx context.Context, v T) (struct{}, error) {
+	return fromSeq(forEachStage("ForEach", ctx, n, f))
+}
+
+// MapTry is Map for a sequence that already carries errors: an errored
+// element is never passed to f — no call is made for it — and is yielded
+// as it arrived, in its place among the results. Everything else is
+// Map's: order, bounds, cancellation. It lets a pipeline go concurrent
+// without first deciding what its errors mean. ⚠ Starts up to n
+// goroutines per iteration, all joined before it returns. ⚠ Consumes at
+// most n elements beyond those yielded, an errored one included, and
+// holds their results. ⚠ A finished result is delivered only when the
+// source next yields or ends. Panics if n <= 0.
+func MapTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Try[T]) catena.Try[U] {
+	return fromTry(mapStage("MapTry", ctx, n, f, true))
+}
+
+// MapUnorderedTry is MapUnordered for a sequence that already carries
+// errors: an errored element is never passed to f, and is yielded as soon
+// as it arrives. ⚠ Starts up to n goroutines per iteration, all joined
+// before it returns. ⚠ Consumes at most n elements beyond those yielded.
+// ⚠ A finished result is delivered only when the source next yields or
+// ends. Panics if n <= 0.
+func MapUnorderedTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Try[T]) catena.Try[U] {
+	return fromTry(mapStage("MapUnorderedTry", ctx, n, f, false))
+}
+
+// ForEachTry is ForEach for a sequence that already carries errors: an
+// errored element is an error like a failed call's, so the first error in
+// time — the source's or a call's — is returned, and the calls still
+// running are cancelled and joined first. ⚠ Starts up to n goroutines,
+// all joined before it returns. ⚠ Full drain on success. Panics if n <= 0.
+func ForEachTry[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Try[T]) error {
+	return fromTry(forEachStage("ForEachTry", ctx, n, f))
+}
+
+// pairs is what a caller-driven stage consumes: a Seq is adapted to one
+// whose every error is nil, and a Try already is one.
+type pairs[T any] = func(yield func(T, error) bool)
+
+func fromSeq[T, R any](stage func(pairs[T]) R) func(catena.Seq[T]) R {
+	return func(s catena.Seq[T]) R {
+		return stage(func(yield func(T, error) bool) {
+			s.Seq()(func(v T) bool { return yield(v, nil) })
+		})
+	}
+}
+
+func fromTry[T, R any](stage func(pairs[T]) R) func(catena.Try[T]) R {
+	return func(t catena.Try[T]) R { return stage(t.Seq2()) }
+}
+
+func forEachStage[T any](op string, ctx context.Context, n int, f func(context.Context, T) error) func(pairs[T]) error {
+	stage := mapStage(op, ctx, n, func(ctx context.Context, v T) (struct{}, error) {
 		return struct{}{}, f(ctx, v)
 	}, false)
-	return func(s catena.Seq[T]) error {
+	return func(s pairs[T]) error {
 		return stage(s).Err()
 	}
 }
 
 // result is what one call of the callback produced.
 type result[U any] struct {
-	u     U
-	err   error
-	crash any // what to re-raise if the call panicked or exited
+	u      U
+	err    error
+	crash  any  // what to re-raise if the call panicked or exited
+	passed bool // an errored source element held in an ordered window: no call was made
 }
 
 // mapStage is the shared body of the caller-driven stages. op names the
 // caller in the construction panic.
 //
 // The source is invoked directly on the consumer's goroutine, as every
-// core operator invokes its source; only f runs elsewhere. Each element
-// starts one goroutine, and the window of n outstanding calls is the only
-// thing that ever blocks the consumer: when it is full, the consumer
-// waits for a result and yields it before taking another element.
-func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Context, T) (U, error), ordered bool) func(catena.Seq[T]) catena.Try[U] {
+// core operator invokes its source; only f runs elsewhere, on a pool of up
+// to n workers. The window of n outstanding results is the only thing
+// that ever blocks the consumer: when it is full, the consumer waits for a
+// result and yields it before taking another element. An errored source
+// element makes no call: in order it takes its place in the window with
+// its result already there, and out of order it is yielded at once.
+func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Context, T) (U, error), ordered bool) func(pairs[T]) catena.Try[U] {
 	posCheck(op, "n", n)
-	return func(s catena.Seq[T]) catena.Try[U] {
+	return func(s pairs[T]) catena.Try[U] {
 		return func(yield func(U, error) bool) {
 			cctx, cancel := context.WithCancel(ctx)
 			var wg sync.WaitGroup
@@ -110,9 +165,11 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 			var cause error // the parent context's error, once seen
 			stopped := false
 
-			// emit delivers the next result; false means stop.
-			emit := func() bool {
-				r := w.take()
+			// deliver yields one result; false means stop.
+			deliver := func(r result[U]) bool {
+				if r.passed {
+					w.passed--
+				}
 				if r.crash != nil {
 					halt() // join before the panic unwinds the source
 					panic(r.crash)
@@ -133,7 +190,7 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 				return !stopped
 			}
 
-			s.Seq()(func(v T) bool {
+			s(func(v T, err error) bool {
 				if closed {
 					return false // a source that kept going after being stopped
 				}
@@ -141,19 +198,32 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 					halt()
 					return false
 				}
-				j := job[T, U]{v, w.reserve()}
-				if workers < w.size {
-					// One worker per outstanding call, so that every
-					// one of them can be running at once.
-					workers++
-					wg.Go(work)
+				switch {
+				case err != nil && ordered:
+					// Its own channel, empty and of capacity one: the
+					// send cannot block.
+					w.passed++
+					w.reserve() <- result[U]{err: err, passed: true}
+				case err != nil:
+					if !deliver(result[U]{err: err}) {
+						halt() // join before the source unwinds
+						return false
+					}
+				default:
+					j := job[T, U]{v, w.reserve()}
+					if workers < w.size-w.passed {
+						// One worker per outstanding call, so that
+						// every one of them can be running at once.
+						workers++
+						wg.Go(work)
+					}
+					jobs <- j
 				}
-				jobs <- j
 				// A full window must give up a result before another
 				// element is taken; beyond that, hand over whatever
 				// has already finished rather than hold it.
 				for w.size == n || (w.size > 0 && w.ready()) {
-					if !emit() {
+					if !deliver(w.take()) {
 						halt() // join before the source unwinds
 						return false
 					}
@@ -161,7 +231,7 @@ func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Co
 				return true
 			})
 			for w.size > 0 && !stopped && cause == nil {
-				emit()
+				deliver(w.take())
 			}
 			halt()
 			if crash != nil { // a call that panicked is never swallowed
@@ -227,6 +297,7 @@ func invoke[T, U any](ctx context.Context, f func(context.Context, T) (U, error)
 type window[U any] struct {
 	ordered bool
 	size    int                  // outstanding calls
+	passed  int                  // ordered: errored elements among them, which made no call
 	slots   fifo[chan result[U]] // ordered: one per outstanding call, oldest first
 	spare   []chan result[U]     // ordered: channels to reuse
 	shared  chan result[U]       // unordered

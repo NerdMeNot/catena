@@ -426,6 +426,19 @@ func TestTryNilReceivers(t *testing.T) {
 	}
 }
 
+func TestTryThen(t *testing.T) {
+	// Then hands over the receiver itself, errors and all, and returns
+	// whatever f returns.
+	got := mixed().Then(func(t catena.Try[int]) []tv { return collectTry(t) })
+	if want := collectTry(mixed()); !slices.Equal(got, want) {
+		t.Fatalf("Then = %v, want %v", got, want)
+	}
+	var n catena.Try[int]
+	if got := n.Then(catena.Try[int].Err); got != nil {
+		t.Fatalf("Then on nil = %v", got)
+	}
+}
+
 func TestTryPull(t *testing.T) {
 	next, stop := mixed().Pull()
 	defer stop()

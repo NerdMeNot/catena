@@ -45,6 +45,21 @@ type mapOp struct {
 var mapOps = []mapOp{
 	{name: "Map", covers: []string{"Map"}, build: parallel.Map[int, int], ordered: true},
 	{name: "MapUnordered", covers: []string{"MapUnordered"}, build: parallel.MapUnordered[int, int]},
+	// The Try stages run every check over a Try with no errors in it —
+	// what they must do there is exactly what Map and MapUnordered do.
+	// What they do with errors is try_test.go's.
+	{name: "MapTry", covers: []string{"MapTry"}, build: viaTry(parallel.MapTry[int, int]), ordered: true},
+	{name: "MapUnorderedTry", covers: []string{"MapUnorderedTry"}, build: viaTry(parallel.MapUnorderedTry[int, int])},
+}
+
+// viaTry adapts a Try stage to the registry's Seq signature.
+func viaTry(build func(context.Context, int, callback) func(catena.Try[int]) catena.Try[int]) func(context.Context, int, callback) func(catena.Seq[int]) catena.Try[int] {
+	return func(ctx context.Context, n int, f callback) func(catena.Seq[int]) catena.Try[int] {
+		stage := build(ctx, n, f)
+		return func(s catena.Seq[int]) catena.Try[int] {
+			return stage(s.MapErr(func(v int) (int, error) { return v, nil }))
+		}
+	}
 }
 
 // stageOp is a producer stage, flattened to Seq[int] -> Seq[int].
@@ -85,7 +100,8 @@ var stageOps = []stageOp{
 // dedicatedCovered names the exported symbols proven by a test of their
 // own rather than through a registry.
 var dedicatedCovered = map[string]string{
-	"ForEach": "TestForEach",
+	"ForEach":    "TestForEach",
+	"ForEachTry": "TestForEachTry",
 }
 
 // ---- fixtures ----

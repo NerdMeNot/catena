@@ -112,7 +112,7 @@ var dedicatedCovered = map[string]string{
 	"Try.Errs": "TestTryIgnoreAndErrs", "Try.Must": "TestTryMust",
 	"Try.UntilErr": "TestTryUntilErr",
 	"Try.Err":      "TestTryR5FirstErrorTerminals", "Try.Count": "TestTryR5FirstErrorTerminals",
-	"Try.Pull": "TestTryPull", "Try.Seq2": "collectTry throughout",
+	"Try.Pull": "TestTryPull", "Try.Then": "TestTryThen", "Try.Seq2": "collectTry throughout",
 }
 
 // listCovered marks the generated List mirror: list_test.go's C15 check

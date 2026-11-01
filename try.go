@@ -378,3 +378,15 @@ func (t Try[T]) Pull() (next func() (T, error, bool), stop func()) {
 func (t Try[T]) Seq2() iter.Seq2[T, error] {
 	return srcTry(t)
 }
+
+// Then returns f(t): Seq.Then for a sequence that carries errors. It lets
+// a function taking a Try sit inside a chain — chiefly the parallel
+// package's Try stages, so a pipeline can go concurrent without first
+// deciding what its errors mean:
+//
+//	t.Filter(isBig).Then(parallel.MapTry(ctx, 8, enrich)).CollectAll()
+//
+// A function needing more arguments goes in a closure.
+func (t Try[T]) Then[U any](f func(Try[T]) U) U {
+	return f(t)
+}

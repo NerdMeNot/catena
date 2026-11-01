@@ -242,7 +242,7 @@ var families = []family{
 			"Try.OnEach", "Try.OnError", "Try.Recover", "Try.WrapErr", "Try.UntilDone",
 			"Try.Collect", "Try.CollectAll", "Try.Ignore", "Try.Errs", "Try.UntilErr",
 			"Try.Fold", "Try.ForEach", "Try.Err", "Try.Count", "Try.Must",
-			"Try.Pull", "Try.Seq2",
+			"Try.Pull", "Try.Seq2", "Try.Then",
 		},
 	},
 	{
@@ -303,6 +303,7 @@ var families = []family{
 			"against real requests.",
 		Members: []string{
 			"parallel.Map", "parallel.MapUnordered", "parallel.ForEach",
+			"parallel.MapTry", "parallel.MapUnorderedTry", "parallel.ForEachTry",
 			"parallel.Buffer", "parallel.ChunkedWithin", "parallel.Merge",
 		},
 	},

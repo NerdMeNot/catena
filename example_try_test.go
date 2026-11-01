@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/NerdMeNot/catena"
+	"github.com/NerdMeNot/catena/parallel"
 )
 
 // importedOrder is one row of the order export the Try examples share.
@@ -347,6 +348,24 @@ func ExampleTry_UntilErr() {
 	// Output:
 	// import stopped: order A-101: bad amount "pending"
 	// revenue so far: 2500
+}
+
+func ExampleTry_Then() {
+	// Then keeps a Try in the chain through a function that takes one —
+	// here a concurrent stage, so the orders are confirmed four at a time
+	// without first deciding what the import's errors mean. The bad row
+	// is never sent to the payment service; it arrives in its place.
+	confirm := func(ctx context.Context, o importedOrder) (string, error) {
+		return fmt.Sprintf("%s confirmed", o.ID), nil
+	}
+	confirmed, failed := importedOrders().
+		Then(parallel.MapTry(context.Background(), 4, confirm)).
+		CollectAll()
+	fmt.Println(confirmed)
+	fmt.Println(failed)
+	// Output:
+	// [A-100 confirmed A-102 confirmed A-103 confirmed]
+	// [order A-101: bad amount "pending"]
 }
 
 func ExampleTry_Must() {
