@@ -7,7 +7,7 @@ All notable changes to catena are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org).
 
-## [Unreleased]
+## [1.6.0] — 2026-11-01
 
 The friction a first pipeline hits, removed: input that can already fail
 now goes through `parallel` without being settled first, calls to other
@@ -82,6 +82,9 @@ that a nil callback now panics where it is passed.
   `x/time/rate` and backoff libraries.
 - The concurrency guide covers input that can already fail, retries and
   rate limits, and `Do`; the concurrency and sources examples use them.
+- The `v1.5.x` series is archived at `/1-5/`, per the rule that a minor
+  series is snapshotted when the next minor ships. The `v1.4.x` archive's
+  API link pointed at v1.3.0 and now points at v1.4.0.
 - **The examples are real work now.** Every operator's example — the code
   the reference pages and pkg.go.dev show — is rewritten around a
   situation a reader will recognise: unpaid orders, access logs, config
@@ -446,6 +449,7 @@ it is retracted in `go.mod` and should not be used. Start here.
   `range`, which makes a 4-stage pipeline 25% faster than the same
   pipeline hand-built from raw closures.
 
+[1.6.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.6.0
 [1.5.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.5.0
 [1.4.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.4.0
 [1.3.0]: https://github.com/NerdMeNot/catena/releases/tag/v1.3.0
