@@ -20,8 +20,7 @@ import (
 // call at the head delays everything behind it (MapUnordered does not).
 // ⚠ A finished result is delivered, and a done ctx is noticed, only when
 // the source next yields or ends: behind a slow live source both wait
-// for the next element.
-// Panics if n <= 0.
+// for the next element. Panics if n <= 0 or f is nil.
 func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U] {
 	return fromSeq(mapStage("Map", ctx, n, f, true))
 }
@@ -31,7 +30,7 @@ func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, er
 // with no call able to delay another. ⚠ Starts up to n goroutines per
 // iteration, all joined before it returns. ⚠ Consumes at most n elements
 // beyond those yielded. ⚠ A finished result is delivered only when the
-// source next yields or ends. Panics if n <= 0.
+// source next yields or ends. Panics if n <= 0 or f is nil.
 func MapUnordered[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U] {
 	return fromSeq(mapStage("MapUnordered", ctx, n, f, false))
 }
@@ -42,7 +41,7 @@ func MapUnordered[T, U any](ctx context.Context, n int, f func(context.Context, 
 // time, not in source order. A done ctx is an error even if every call
 // that ran succeeded. On an error the remaining calls are cancelled
 // through their context and joined before it returns. ⚠ Starts up to n goroutines, all joined before it returns.
-// ⚠ Full drain on success. Panics if n <= 0.
+// ⚠ Full drain on success. Panics if n <= 0 or f is nil.
 func ForEach[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Seq[T]) error {
 	return fromSeq(forEachStage("ForEach", ctx, n, f))
 }
@@ -55,7 +54,7 @@ func ForEach[T any](ctx context.Context, n int, f func(context.Context, T) error
 // goroutines per iteration, all joined before it returns. ⚠ Consumes at
 // most n elements beyond those yielded, an errored one included, and
 // holds their results. ⚠ A finished result is delivered only when the
-// source next yields or ends. Panics if n <= 0.
+// source next yields or ends. Panics if n <= 0 or f is nil.
 func MapTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Try[T]) catena.Try[U] {
 	return fromTry(mapStage("MapTry", ctx, n, f, true))
 }
@@ -65,7 +64,7 @@ func MapTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U,
 // as it arrives. ⚠ Starts up to n goroutines per iteration, all joined
 // before it returns. ⚠ Consumes at most n elements beyond those yielded.
 // ⚠ A finished result is delivered only when the source next yields or
-// ends. Panics if n <= 0.
+// ends. Panics if n <= 0 or f is nil.
 func MapUnorderedTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Try[T]) catena.Try[U] {
 	return fromTry(mapStage("MapUnorderedTry", ctx, n, f, false))
 }
@@ -74,7 +73,7 @@ func MapUnorderedTry[T, U any](ctx context.Context, n int, f func(context.Contex
 // errored element is an error like a failed call's, so the first error in
 // time — the source's or a call's — is returned, and the calls still
 // running are cancelled and joined first. ⚠ Starts up to n goroutines,
-// all joined before it returns. ⚠ Full drain on success. Panics if n <= 0.
+// all joined before it returns. ⚠ Full drain on success. Panics if n <= 0 or f is nil.
 func ForEachTry[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Try[T]) error {
 	return fromTry(forEachStage("ForEachTry", ctx, n, f))
 }
@@ -96,6 +95,8 @@ func fromTry[T, R any](stage func(pairs[T]) R) func(catena.Try[T]) R {
 }
 
 func forEachStage[T any](op string, ctx context.Context, n int, f func(context.Context, T) error) func(pairs[T]) error {
+	posCheck(op, "n", n)
+	nilCheck(op, "f", f == nil)
 	stage := mapStage(op, ctx, n, func(ctx context.Context, v T) (struct{}, error) {
 		return struct{}{}, f(ctx, v)
 	}, false)
@@ -124,6 +125,7 @@ type result[U any] struct {
 // its result already there, and out of order it is yielded at once.
 func mapStage[T, U any](op string, ctx context.Context, n int, f func(context.Context, T) (U, error), ordered bool) func(pairs[T]) catena.Try[U] {
 	posCheck(op, "n", n)
+	nilCheck(op, "f", f == nil)
 	return func(s pairs[T]) catena.Try[U] {
 		return func(yield func(U, error) bool) {
 			cctx, cancel := context.WithCancel(ctx)

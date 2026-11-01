@@ -68,14 +68,20 @@ func TestLinesSplitting(t *testing.T) {
 // record by record, each flattened to Try[string]. Every one gets the same
 // lifecycle checks; the fixture text is valid input for all three.
 var lineSources = []struct {
-	name string
-	of   func(open func() (io.ReadCloser, error)) catena.Try[string]
+	name   string
+	of     func(open func() (io.ReadCloser, error)) catena.Try[string]
+	header int // lines of the fixture taken as a header rather than yielded
 }{
-	{"Lines", source.Lines},
+	{"Lines", source.Lines, 0},
 	{"CSV", func(open func() (io.ReadCloser, error)) catena.Try[string] {
 		return source.CSV(open, nil).Map(func(rec []string) string { return strings.Join(rec, ",") })
-	}},
-	{"JSONLines", source.JSONLines[string]},
+	}, 0},
+	{"CSVHeader", func(open func() (io.ReadCloser, error)) catena.Try[string] {
+		return source.CSVHeader(open, nil).Map(func(r source.Record) string { return r.Get("a") })
+	}, 1},
+	{"JSONLines", func(open func() (io.ReadCloser, error)) catena.Try[string] {
+		return source.JSONLines[string](open, nil)
+	}, 0},
 }
 
 func TestLineSourcesLifecycle(t *testing.T) {
@@ -92,7 +98,7 @@ func TestLineSourcesLifecycle(t *testing.T) {
 
 			t.Run("early termination closes", func(t *testing.T) {
 				tr := text(three)
-				if got := src.of(tr.open).Ignore().Take(2).Collect(); len(got) != 2 {
+				if got := src.of(tr.open).Ignore().Take(1).Collect(); len(got) != 1 {
 					t.Fatalf("got %v", got)
 				}
 				if tr.opens != 1 || tr.closes != 1 {
@@ -116,7 +122,7 @@ func TestLineSourcesLifecycle(t *testing.T) {
 				seq := src.of(tr.open)
 				first, _ := seq.Collect()
 				second, _ := seq.Collect()
-				if len(first) != 3 || !slices.Equal(first, second) || tr.opens != 2 || tr.closes != 2 {
+				if len(first) != 3-src.header || !slices.Equal(first, second) || tr.opens != 2 || tr.closes != 2 {
 					t.Fatalf("%v then %v, opens=%d closes=%d", first, second, tr.opens, tr.closes)
 				}
 			})
@@ -144,7 +150,7 @@ func TestLineSourcesLifecycle(t *testing.T) {
 					}
 					got = append(got, v)
 				}
-				if len(got) != 1 || len(errs) != 1 || !errors.Is(errs[0], errBoom) || tr.closes != 1 {
+				if len(got) != 1-src.header || len(errs) != 1 || !errors.Is(errs[0], errBoom) || tr.closes != 1 {
 					t.Fatalf("got=%v errs=%v closes=%d", got, errs, tr.closes)
 				}
 			})
@@ -228,13 +234,96 @@ func TestCSV(t *testing.T) {
 	})
 }
 
+func TestCSVHeader(t *testing.T) {
+	t.Run("fields by column name", func(t *testing.T) {
+		in := "\ufeffemail,age,email,note\nada@x.io,36,second@x.io,\nbob@x.io,41,,vip\n"
+		recs, err := source.CSVHeader(text(in).open, nil).Collect()
+		if err != nil || len(recs) != 2 {
+			t.Fatalf("got %v %v", recs, err)
+		}
+		// The byte-order mark is gone, and a repeated column means the first.
+		if recs[0].Get("email") != "ada@x.io" || recs[0].Get("age") != "36" || recs[1].Get("note") != "vip" {
+			t.Fatalf("got %+v", recs)
+		}
+		if v, ok := recs[0].Lookup("note"); v != "" || !ok {
+			t.Fatalf("an empty field: %q %v", v, ok)
+		}
+		if v, ok := recs[0].Lookup("phone"); v != "" || ok || recs[0].Get("phone") != "" {
+			t.Fatalf("a column the header lacks: %q %v", v, ok)
+		}
+		if !slices.Equal(recs[1].Fields, []string{"bob@x.io", "41", "", "vip"}) {
+			t.Fatalf("fields %q", recs[1].Fields)
+		}
+	})
+
+	t.Run("a short record has no field for the columns it lacks", func(t *testing.T) {
+		recs, err := source.CSVHeader(text("a,b\n1\n").open, func(r *csv.Reader) { r.FieldsPerRecord = -1 }).Collect()
+		if err != nil || len(recs) != 1 {
+			t.Fatalf("got %v %v", recs, err)
+		}
+		if v, ok := recs[0].Lookup("b"); v != "" || ok {
+			t.Fatalf("got %q %v", v, ok)
+		}
+	})
+
+	t.Run("a bad record is an element, and reading goes on", func(t *testing.T) {
+		recs, errs := source.CSVHeader(text("a,b\n1,2\n3\n4,5\n").open, nil).CollectAll()
+		if len(recs) != 2 || len(errs) != 1 || !errors.Is(errs[0], csv.ErrFieldCount) {
+			t.Fatalf("got %v %v", recs, errs)
+		}
+	})
+
+	t.Run("a header that cannot be parsed ends it", func(t *testing.T) {
+		recs, errs := source.CSVHeader(text("a,\"b\nc\"x,d\n1,2\n").open, nil).CollectAll()
+		var pe *csv.ParseError
+		if recs != nil || len(errs) != 1 || !errors.As(errs[0], &pe) {
+			t.Fatalf("got %v %v", recs, errs)
+		}
+	})
+
+	t.Run("no data, no records", func(t *testing.T) {
+		recs, err := source.CSVHeader(text("").open, nil).Collect()
+		if recs != nil || err != nil {
+			t.Fatalf("got %v %v", recs, err)
+		}
+	})
+}
+
+func TestJSONLinesCutShort(t *testing.T) {
+	_, errs := source.JSONLines[map[string]int](text("{\"a\":1}\n{\"a\":").open, nil).CollectAll()
+	if len(errs) != 1 || !errors.Is(errs[0], io.ErrUnexpectedEOF) || errs[0].Error() != "line 2: JSON value cut short: unexpected EOF" {
+		t.Fatalf("errs %v", errs)
+	}
+}
+
+func TestJSONLinesSetup(t *testing.T) {
+	type user struct {
+		Name string `json:"name"`
+	}
+	in := "{\"name\":\"ada\"}\n{\"nmae\":\"bob\"}\n{\"name\":\"cy\"} {\"name\":\"dee\"}\n"
+	// By default a misspelt field decodes to the zero value.
+	users, errs := source.JSONLines[user](text(in).open, nil).CollectAll()
+	if len(users) != 2 || len(errs) != 1 {
+		t.Fatalf("default: %v %v", users, errs)
+	}
+	// Two values on one line is an error either way.
+	if !strings.HasPrefix(errs[0].Error(), "line 3: ") {
+		t.Fatalf("default: %v", errs)
+	}
+	strict := func(d *json.Decoder) { d.DisallowUnknownFields() }
+	users, errs = source.JSONLines[user](text(in).open, strict).CollectAll()
+	if len(users) != 1 || len(errs) != 2 || !strings.HasPrefix(errs[0].Error(), "line 2: json: unknown field") {
+		t.Fatalf("strict: %v %v", users, errs)
+	}
+}
+
 func TestJSONLines(t *testing.T) {
 	type event struct {
 		Kind string `json:"kind"`
 		N    int    `json:"n"`
 	}
 	in := "{\"kind\":\"click\",\"n\":1}\r\n\n  \n{\"kind\":\"view\",\"n\":2}\nnot json\n{\"kind\":\"click\",\"n\":\"three\"}\n{\"kind\":\"buy\",\"n\":4}"
-	events, errs := source.JSONLines[event](text(in).open).CollectAll()
+	events, errs := source.JSONLines[event](text(in).open, nil).CollectAll()
 	want := []event{{"click", 1}, {"view", 2}, {"buy", 4}}
 	if !slices.Equal(events, want) || len(errs) != 2 {
 		t.Fatalf("got %v %v", events, errs)

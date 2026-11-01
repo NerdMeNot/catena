@@ -20,4 +20,4 @@ For the one-line-per-operator index with costs at a glance, see
 13. [Pairs](13-pairs.md) — Seq2 is the standard library's pairing type with methods — what maps.All and slices.All speak, so every boundary with the standard library is a free conversion
 14. [Eager](14-eager.md) — List is a []T carrying the whole Seq *method* set, evaluated at once with exact preallocation
 15. [Concurrency](15-concurrency.md) — The operators that start goroutines, in the `catena/parallel` package — the core package never does
-16. [Sources](16-sources.md) — Ready-made producers for what pipelines most often start from — lines, CSV, JSON Lines, pages and rows — in the `catena/source` and `catena/source/sqlsource` packages
+16. [Sources](16-sources.md) — Ready-made producers for what pipelines most often start from — lines, CSV with or without a header, JSON Lines, pages and rows — in the `catena/source` and `catena/source/sqlsource` packages

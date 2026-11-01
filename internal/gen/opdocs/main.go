@@ -289,15 +289,16 @@ var families = []family{
 		Slug:  "concurrency",
 		Title: "Concurrency",
 		Summary: "The operators that start goroutines, in the `catena/parallel` package — the " +
-			"core package never does. Each is a stage that sits in a chain through " +
-			"`Seq.Then` or `Try.Then`, and each joins every goroutine it started before its " +
-			"iteration returns: on a normal end, an early break, a cancelled context and a " +
-			"panic alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently " +
+			"core package never does. The stages sit in a chain through `Seq.Then` or " +
+			"`Try.Then`, and each joins every goroutine it started before its iteration " +
+			"returns: on a normal end, an early break, a cancelled context and a panic " +
+			"alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently " +
 			"while the source stays on the consumer's goroutine, and their `Try` forms do " +
 			"the same for input that can already fail; `Buffer`, `ChunkedWithin` and " +
 			"`Merge` run the source itself on a goroutine of its own. `Do` runs a few " +
 			"different functions at once, and `Retry` and `Limit` wrap a callback with " +
-			"retries or a rate limit, starting nothing. The " +
+			"retries or a rate limit, starting nothing; `Backoff` makes the usual wait " +
+			"between retries. The " +
 			"[concurrency guide](../06-concurrency.md) explains the two models.\n\n" +
 			"Every example below is complete: the function being run concurrently is " +
 			"written out, because seeing that it is an ordinary function is most of " +
@@ -307,7 +308,7 @@ var families = []family{
 		Members: []string{
 			"parallel.Map", "parallel.MapUnordered", "parallel.ForEach",
 			"parallel.MapTry", "parallel.MapUnorderedTry", "parallel.ForEachTry",
-			"parallel.Do", "parallel.Retry", "parallel.Limit",
+			"parallel.Do", "parallel.Retry", "parallel.Backoff", "parallel.Limit",
 			"parallel.Buffer", "parallel.ChunkedWithin", "parallel.Merge",
 		},
 	},
@@ -315,7 +316,7 @@ var families = []family{
 		Order: 16,
 		Slug:  "sources",
 		Title: "Sources",
-		Summary: "Ready-made producers for what pipelines most often start from — lines, CSV, " +
+		Summary: "Ready-made producers for what pipelines most often start from — lines, CSV with or without a header, " +
 			"JSON Lines, pages and rows — in the `catena/source` and " +
 			"`catena/source/sqlsource` packages. Each takes a function that opens its " +
 			"resource rather than an open resource, and calls it inside the iteration: a " +
@@ -326,7 +327,8 @@ var families = []family{
 			"it still come. For anything not here, " +
 			"[writing your own source](../09-writing-sources.md) is the same shape.",
 		Members: []string{
-			"source.Lines", "source.CSV", "source.JSONLines",
+			"source.Lines", "source.CSV", "source.CSVHeader", "source.Record.Get",
+			"source.Record.Lookup", "source.JSONLines",
 			"source.Paginate", "sqlsource.Rows",
 		},
 	},

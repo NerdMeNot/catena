@@ -313,14 +313,34 @@ func ExampleRetry() {
 		return sku + " in stock", nil
 	}
 	transient := func(err error) bool { return errors.Is(err, errUnavailable) }
-	backoff := func(attempt int) time.Duration { return time.Duration(attempt) * time.Millisecond }
 
-	// Up to three tries each, four items at a time.
+	// Up to three tries each, four items at a time, waiting a little
+	// longer after each failure: about 1ms, then 2ms.
+	backoff := parallel.Backoff(time.Millisecond, 10*time.Millisecond)
 	checked, err := catena.Of("kbd-01", "mse-07", "mon-27").
 		Then(parallel.Map(context.Background(), 4, parallel.Retry(3, backoff, transient, inStock))).
 		Collect()
 	fmt.Println(checked, err)
 	// Output: [kbd-01 in stock mse-07 in stock mon-27 in stock] <nil>
+}
+
+func ExampleBackoff() {
+	// The waits Backoff gives grow from base and stop at the ceiling, and
+	// each is drawn from the upper half of its range so that callers that
+	// failed together do not all come back together.
+	backoff := parallel.Backoff(100*time.Millisecond, time.Second)
+	for attempt := 1; attempt <= 6; attempt++ {
+		d := backoff(attempt, nil)
+		ceiling := min(100*time.Millisecond<<(attempt-1), time.Second)
+		fmt.Printf("after try %d: between %v and %v: %v\n", attempt, ceiling/2, ceiling, d >= ceiling/2 && d <= ceiling)
+	}
+	// Output:
+	// after try 1: between 50ms and 100ms: true
+	// after try 2: between 100ms and 200ms: true
+	// after try 3: between 200ms and 400ms: true
+	// after try 4: between 400ms and 800ms: true
+	// after try 5: between 500ms and 1s: true
+	// after try 6: between 500ms and 1s: true
 }
 
 func ExampleLimit() {

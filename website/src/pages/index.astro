@@ -7,9 +7,9 @@ import site from '../data/site.json'
 
 const title = 'catena — pipelines for Go: say what you want from the data'
 const description =
-  'Chained, fully typed, lazy pipelines for Go 1.27+. The grouping loop, the worker pool ' +
-  'and the error plumbing, already written — with every operator’s memory and termination ' +
-  'behaviour specified and tested.'
+  'Chained, fully typed, lazy pipelines for Go 1.27+. The grouping loop, the worker pool, ' +
+  'the retry loop and the error plumbing, already written — with every operator’s memory ' +
+  'and termination behaviour specified and tested.'
 
 // A deliberately small highlighter: the code on this page is written here
 // as plain Go and marked up at build time, so it can be read, edited and
@@ -32,12 +32,27 @@ const go = (src: string) =>
     .join('\n')
 
 const hero = go(`
-// The ten largest overdue invoices. One pass; ten rows in memory, not the table.
-overdue := catena.FromSlice(invoices).
+// Who to chase this week. One pass; ten rows in memory, not the table.
+chase := catena.FromSlice(invoices).
     FilterNot(Invoice.IsPaid).
     Filter(func(i Invoice) bool { return i.Due.Before(today) }).
-    TopNBy(10, Invoice.Amount)
+    Map(Invoice.Reminder). // Invoice in, Reminder out: new in Go 1.27
+    TopNBy(10, Reminder.Amount)
 `)
+
+// What the current release added, shown under the hero. It renders only
+// while the site documents that release, so it cannot go stale: when the
+// next one ships, update it or it quietly disappears.
+const whatsNew = {
+  version: '1.6',
+  items: [
+    'retries with backoff, and rate limits, around any call',
+    'errors that flow through concurrent stages untouched',
+    'CSV by column name, and JSON Lines',
+    '<code>parallel.Do</code> for a few calls at once',
+  ],
+}
+const showWhatsNew = site.version.startsWith(whatsNew.version + '.')
 
 const scenes = [
   {
@@ -59,31 +74,39 @@ ranked := catena.FromSlice(orders).
   {
     head: 'The worker pool',
     pain: `A semaphore, a <code>WaitGroup</code>, a results slice indexed so things come back in
-           order, an error channel, cancelling the rest when one fails — and hoping nothing
-           is still running when you return.`,
+           order, an error channel, cancelling the rest when one fails, a retry loop with a
+           sleep in it, a rate limiter shared across the workers — and hoping nothing is
+           still running when you return.`,
     code: go(`
 // func loadCustomer(ctx context.Context, id ID) (Customer, error)
+load := parallel.Limit(50, time.Second, loadCustomer) // 50 a second, all workers together
+load = parallel.Retry(3, backoff, isTransient, load)  // and the 503s tried again
 
 customers, err := catena.FromSlice(ids).
-    Then(parallel.Map(ctx, 8, loadCustomer)). // 8 in flight, results in order
-    Collect()                                 // first error cancels the rest
+    Then(parallel.Map(ctx, 8, load)). // 8 in flight, results in order
+    Collect()                         // first error cancels the rest
 `),
-    gain: `<code>loadCustomer</code> is an ordinary function. Every goroutine has exited by the
-           time <code>Collect</code> returns — on success, on error, on cancel, and on panic.`,
+    gain: `<code>loadCustomer</code> is an ordinary function, and so is what <code>Retry</code>
+           and <code>Limit</code> make of it. Every goroutine has exited by the time
+           <code>Collect</code> returns — on success, on error, on cancel, and on panic.`,
   },
   {
     head: 'The error plumbing',
     pain: `Half the loop is <code>if err != nil</code>, and whether a bad row aborts the import or
            gets skipped is decided deep inside it, where the caller cannot change it.`,
     code: go(`
-rows := source.Lines(open).MapErr(parseRow) // a failure is an element
+rows := source.CSVHeader(open, nil).MapErr(parseCustomer) // a bad row is an element
 
-good, err  := rows.Collect()          // stop at the first bad row
-good, errs := rows.CollectAll()       // import what parses, report the rest
-good       := rows.Ignore().Collect() // skip bad rows
+good, err  := rows.Collect()    // stop at the first bad row
+good, errs := rows.CollectAll() // import what parses, report the rest
+
+saved, errs := rows.
+    Then(parallel.MapTry(ctx, 8, save)). // concurrent: bad rows pass through, never saved
+    CollectAll()
 `),
-    gain: `The pipeline carries the errors; the consumer picks the policy. The file is opened
-           when the pipeline runs and closed on every way out of it.`,
+    gain: `The pipeline carries the errors; the consumer picks the policy — even after a
+           concurrent stage. The file is opened when the pipeline runs and closed on every
+           way out of it.`,
   },
 ]
 
@@ -235,6 +258,20 @@ const box = [
           <a class="secondary" href="/guides/coming-from/">Coming from lo, Kotlin or LINQ?</a>
         </div>
       </section>
+
+      {
+        showWhatsNew && (
+          <section class="whatsnew">
+            <a href="/reference/changelog/">
+              <span class="tag">New in v{whatsNew.version}</span>
+              <span class="items">
+                {whatsNew.items.map((item) => <span class="item" set:html={item} />)}
+              </span>
+              <span class="more">What changed →</span>
+            </a>
+          </section>
+        )
+      }
 
       <section class="scenes">
         <h2>Three things you stop writing</h2>
@@ -516,6 +553,33 @@ const box = [
 
       pre .c { color: #8b949e; }
       pre .s { color: #a5d6ff; }
+
+      .whatsnew { margin: 0 0 3rem; }
+      .whatsnew a {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.5rem 1rem;
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--ember);
+        border-radius: 6px;
+        padding: 0.85rem 1.1rem;
+        text-decoration: none;
+        color: var(--body);
+        font-size: 0.92rem;
+      }
+      .whatsnew a:hover { border-color: var(--ember); }
+      .whatsnew .tag {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: var(--ember-lift);
+        white-space: nowrap;
+      }
+      .whatsnew .items { display: flex; flex-wrap: wrap; gap: 0.25rem 0; flex: 1; }
+      .whatsnew .item:not(:last-child)::after { content: '·'; margin: 0 0.6rem; color: var(--muted); }
+      .whatsnew code { color: var(--ember-lift); font-size: 0.88em; }
+      .whatsnew .more { color: var(--ink); font-weight: 500; white-space: nowrap; }
 
       .scenes { padding: 3rem 0 1rem; border-top: 1px solid var(--rule); }
       .scenes > h2, .box > h2 {

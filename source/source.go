@@ -1,5 +1,6 @@
 // Package source holds ready-made producers for the things pipelines most
-// often start from: the lines of a reader, CSV records, JSON Lines, and
+// often start from: the lines of a reader, CSV records with or without a
+// header, JSON Lines, and
 // the pages of a paginated API. catena/source/sqlsource has the
 // database/sql one, kept apart so that importing this package does not
 // link database/sql.
@@ -45,8 +46,10 @@ import (
 // too, and an empty input yields nothing. Lines may be of any length. open
 // is called once per iteration, inside it, and the reader is closed on
 // every exit; the error from Close is discarded. A failure to open, or to
-// read, is yielded as ("", err) and ends the sequence. ⚠ Holds one line,
-// however long, in memory.
+// read, is yielded as ("", err) and ends the sequence. To skip a first
+// line, settle the errors before Drop — UntilErr(&err).Drop(1) — since
+// Drop counts an error as an element and would skip a failure to open as
+// if it were the line. ⚠ Holds one line, however long, in memory.
 func Lines(open func() (io.ReadCloser, error)) catena.Try[string] {
 	return func(yield func(string, error) bool) {
 		rc, err := open()
@@ -97,9 +100,10 @@ func eachLine(r io.Reader, f func(line string) bool) error {
 // fields — is yielded as (nil, err), err a *csv.ParseError naming its line,
 // and reading continues with the next record; a failure to open or to
 // read ends the sequence. An opening quote that is never closed takes the
-// rest of the input with it, as encoding/csv reads it, and is one error. A
-// header row is a record like any other: Drop(1) skips it. ⚠ Holds one
-// record in memory.
+// rest of the input with it, as encoding/csv reads it, and is one error.
+// For data with a header row, CSVHeader reads it for you: Drop(1) would
+// also drop an error standing in its place — a file that failed to open —
+// since Drop counts an error as an element. ⚠ Holds one record in memory.
 func CSV(open func() (io.ReadCloser, error), setup func(*csv.Reader)) catena.Try[[]string] {
 	return func(yield func([]string, error) bool) {
 		rc, err := open()
@@ -133,14 +137,79 @@ func CSV(open func() (io.ReadCloser, error), setup func(*csv.Reader)) catena.Try
 	}
 }
 
+// CSVHeader is CSV for data whose first record is a header: it reads the
+// header, and yields every record after it as a Record, whose fields can be
+// looked up by column name. A failure to open or to read, or a header that
+// cannot be parsed, ends the sequence, as there is no way to name the
+// columns; a malformed record after it is an element, and reading
+// continues. A byte-order mark before the first column name, as
+// spreadsheet exports write, is dropped. Data with no records at all
+// yields nothing. Unless setup says otherwise, every record must have as
+// many fields as the header. ⚠ Holds the header and one record in memory.
+func CSVHeader(open func() (io.ReadCloser, error), setup func(*csv.Reader)) catena.Try[Record] {
+	records := CSV(open, setup)
+	return func(yield func(Record, error) bool) {
+		var columns map[string]int // nil until the header is read
+		records(func(fields []string, err error) bool {
+			switch {
+			case columns == nil && err != nil:
+				yield(Record{}, err)
+				return false
+			case columns == nil:
+				columns = make(map[string]int, len(fields))
+				for i, name := range fields {
+					if i == 0 {
+						name = strings.TrimPrefix(name, "\ufeff")
+					}
+					if _, dup := columns[name]; !dup {
+						columns[name] = i
+					}
+				}
+				return true
+			case err != nil:
+				return yield(Record{}, err)
+			}
+			return yield(Record{Fields: fields, columns: columns}, nil)
+		})
+	}
+}
+
+// Record is one record of CSV data read by CSVHeader: its fields, in
+// order, and the header's column names to find them by.
+type Record struct {
+	Fields  []string
+	columns map[string]int // shared by the records of one iteration
+}
+
+// Get returns the field in the named column, or "" if there is none —
+// which Lookup tells apart from an empty field. Where the header names a
+// column twice, the first is meant.
+func (r Record) Get(column string) string {
+	v, _ := r.Lookup(column)
+	return v
+}
+
+// Lookup returns the field in the named column, and whether the header
+// has such a column and this record a field for it.
+func (r Record) Lookup(column string) (string, bool) {
+	i, ok := r.columns[column]
+	if !ok || i >= len(r.Fields) {
+		return "", false
+	}
+	return r.Fields[i], true
+}
+
 // JSONLines yields the values of the JSON Lines data that open returns:
-// each line decoded into a T by encoding/json. Blank lines are skipped. A
-// line that does not decode is yielded as (zero, err), err wrapping
-// json's error with the line's number ("line 3: …"), and reading
-// continues; a failure to open or to read ends the sequence. open is
-// called once per iteration, inside it, and the reader is closed on every
-// exit. ⚠ Holds one line, however long, in memory.
-func JSONLines[T any](open func() (io.ReadCloser, error)) catena.Try[T] {
+// each line decoded into a T by encoding/json. setup, if not nil,
+// configures the decoder for every line — DisallowUnknownFields, so that a
+// misspelt field is an error rather than a zero value, or UseNumber.
+// Blank lines are skipped. A line that does not decode, or holds more than
+// one value, is yielded as (zero, err), err wrapping json's error with the
+// line's number ("line 3: …"), and reading continues; a failure to open or
+// to read ends the sequence. open is called once per iteration, inside it,
+// and the reader is closed on every exit. ⚠ Holds one line, however long,
+// in memory.
+func JSONLines[T any](open func() (io.ReadCloser, error), setup func(*json.Decoder)) catena.Try[T] {
 	return func(yield func(T, error) bool) {
 		var zero T
 		rc, err := open()
@@ -155,8 +224,8 @@ func JSONLines[T any](open func() (io.ReadCloser, error)) catena.Try[T] {
 			if strings.TrimSpace(line) == "" {
 				return true
 			}
-			var v T
-			if err := json.Unmarshal([]byte(line), &v); err != nil {
+			v, err := decodeLine[T](line, setup)
+			if err != nil {
 				return yield(zero, fmt.Errorf("line %d: %w", n, err))
 			}
 			return yield(v, nil)
@@ -166,6 +235,27 @@ func JSONLines[T any](open func() (io.ReadCloser, error)) catena.Try[T] {
 		}
 	}
 }
+
+// decodeLine decodes the one JSON value a line must hold.
+func decodeLine[T any](line string, setup func(*json.Decoder)) (T, error) {
+	var v T
+	dec := json.NewDecoder(strings.NewReader(line))
+	if setup != nil {
+		setup(dec)
+	}
+	if err := dec.Decode(&v); err == io.ErrUnexpectedEOF {
+		return v, fmt.Errorf("JSON value cut short: %w", err)
+	} else if err != nil {
+		return v, err
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		return v, errMoreThanOne
+	}
+	return v, nil
+}
+
+var errMoreThanOne = errors.New("more than one JSON value on the line")
 
 // Paginate yields the items of a paginated source, one page at a time.
 // fetch is given a cursor — first, to begin with — and returns that page's

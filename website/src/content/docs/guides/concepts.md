@@ -31,8 +31,9 @@ standard library's `maps.All`/`slices.All` world, not a second home.
 Those four are the whole core package. Three more packages sit beside it,
 each opt-in by import: `catena/parallel` for the operators that start
 goroutines ([concurrency](/guides/concurrency/)), `catena/source` for
-ready-made producers over readers, paginated APIs and SQL rows
-([error handling](/guides/error-handling/)), and the separate `catena/lint`
+ready-made producers over readers, CSV, JSON Lines, paginated APIs and
+SQL rows ([sources](/operators/sources/),
+[writing your own](/guides/writing-sources/)), and the separate `catena/lint`
 module ([linting](/guides/linting/)).
 
 ## Eager vs lazy — the actual difference

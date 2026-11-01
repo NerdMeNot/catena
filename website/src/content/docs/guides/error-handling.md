@@ -36,7 +36,11 @@ first half, rule 5 is the second; rule 4 is a producer convention.
    `.Ignore().Take(3)`. Note the deliberate asymmetry with `Count`: `Take`
    is an intermediate and counts errored elements, while `Count` is a
    terminal and stops at the first error (rule 5), returning the successes
-   before it.
+   before it. The same goes for `Drop`, and it is the one rule that bites:
+   `Drop(1)` to skip a header drops whatever is first — including a file
+   that failed to open, which is a source's only element. Settle the
+   errors first (`UntilErr(&err).Drop(1)`), or use a source that knows
+   about headers, such as `source.CSVHeader`.
 3. **An error never terminates `TakeWhile`.** Only a successful element
    failing the predicate ends the sequence.
 4. **Operators that generate an error yield the zero value with it.**
@@ -54,7 +58,9 @@ operators `Seq` has. That is the design, not an omission: the
 moment data can fail, you should pick an error policy early and get the
 full API back. The intended shape is to stay in `Try` only while errors are
 still in play, then commit — `Ignore()`, `UntilErr(&err)`, `Must()`, `Collect()`,
-`CollectAll()` — and continue on `Seq`.
+`CollectAll()` — and continue on `Seq`. The exception is a concurrent
+stage: the `parallel` package's `Try` forms take a `Try` as it is, through
+`Try.Then`, so a pipeline can go concurrent before it decides.
 
 If you find yourself wanting `Sorted` or `GroupBy` on a `Try`, the errors
 have been carried one stage too far.
@@ -75,8 +81,10 @@ if err != nil {
 
 Check the error once the pipeline has been consumed — the same shape as
 `bufio.Scanner`, whose `Err` is read after the loop. It is how a fallible
-source feeds a stage that takes a plain `Seq`, including the concurrent
-ones: `rows.UntilErr(&err).Then(parallel.Map(ctx, 8, enrich))`.
+source feeds a stage that takes a plain `Seq`:
+`rows.UntilErr(&err).Then(parallel.Map(ctx, 8, enrich))`. Or skip the
+policy: `rows.Then(parallel.MapTry(ctx, 8, enrich))` takes the `Try` as it
+is ([concurrency](/guides/concurrency/#input-that-can-already-fail)).
 
 ## Adding context where it exists
 
@@ -128,7 +136,8 @@ func Rows[T any](open func() (*sql.Rows, error), scan func(*sql.Rows) (T, error)
 ```
 
 That function ships as `sqlsource.Rows`, next to `source.Lines` for the
-lines of a reader, `source.CSV` and `source.JSONLines` for records, and
+lines of a reader, `source.CSV`, `source.CSVHeader` and `source.JSONLines`
+for records, and
 `source.Paginate` for a paginated API — see the
 [sources reference](/operators/sources/). It is written out here
 because the same shape wraps anything else you own;

@@ -60,6 +60,7 @@ methods.
 | `Must` | `Must` | on a `Try` |
 | `lop.Map`, `lop.ForEach` | `parallel.Map`, `parallel.ForEach` | bounded, ordered, and joined before returning |
 | `FanIn`, `BufferWithTimeout` | `parallel.Merge`, `parallel.ChunkedWithin` | sequences rather than channels |
+| `Attempt`, `AttemptWithDelay` | `parallel.Retry` | wraps the callback; a predicate picks which errors are worth another try |
 
 Not here, on purpose: `Ternary`, `ToPtr`, `Coalesce` and the string
 helpers (catena is only about sequences), tuples beyond pairs, and the
@@ -101,6 +102,8 @@ terminal operations. `List` is `List`.
 | `runCatching`, `Result` | `MapErr`, `UntilErr` | errors are per element, on a `Try` |
 | Flow's `buffer`, `merge` | `parallel.Buffer`, `parallel.Merge` | |
 | Flow's `flatMapMerge` over a suspending call | `parallel.Map`, `parallel.MapUnordered` | |
+| Flow's `retry`, `retryWhen` | `parallel.Retry` | around the call, not the stream |
+| `coroutineScope { async … awaitAll() }` | `parallel.Do` | the first failure cancels the rest |
 
 ## From LINQ
 
@@ -134,3 +137,17 @@ that take a key selector end in `By` here.
 | `Range`, `Repeat`, `Empty` | `Range`, `RepeatN`, `Empty` | |
 | `ToList`, `ToArray` | `ToList`, `Collect` | |
 | `AsParallel().Select` | `parallel.Map` | order is kept; `parallel.MapUnordered` is the `AsUnordered` form |
+| `Parallel.Invoke` | `parallel.Do` | the first failure cancels the rest |
+
+## From errgroup, x/time/rate or a backoff library
+
+These are the packages a Go program usually assembles its concurrency
+from. catena's versions are callbacks and stages rather than objects, and
+every goroutine has exited before the call that started it returns.
+
+| You use | catena | Note |
+|---|---|---|
+| `errgroup.Group` with `Go` and `Wait` | `parallel.Do` | the first error cancels the rest, as `errgroup.WithContext` does |
+| `errgroup` with `SetLimit` over many items | `parallel.ForEach` | the limit is its `n` |
+| `rate.Limiter` with `Wait` | `parallel.Limit` | wraps the callback; at most `n` calls in any period `per` |
+| `backoff.Retry`, `retry-go` | `parallel.Retry`, `parallel.Backoff` | the backoff is given the error, for `Retry-After` |

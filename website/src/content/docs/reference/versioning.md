@@ -43,13 +43,12 @@ select one. Use v1.1.0 or later.
 
 ## How the docs track releases
 
-Today catena has one released version, so this site documents it directly
-and needs no version switcher. When a second release exists, the previous
-one is archived at `/1-5/…` and a
-version selector appears in the header
-— the machinery ([starlight-versions](https://starlight-versions.vercel.app))
-is already a dependency, and the procedure is written down in the
-repository's releasing guide.
+This site documents the current release at its root. Each earlier minor
+series is archived under its own prefix — `/1-4/`, `/1-3/` and so on —
+from the last tag in that series, and the switcher in the header moves
+between them; an archived page says that it is one and links to the
+current release. One archive per minor series, not per tag: a patch
+cannot change the API, and pkg.go.dev already keeps every tag's signatures.
+The procedure is written down in the repository's releasing guide.
 
-Until then, the rule that matters is the one above: the version in the
-header is read from the source, not typed by hand.
+The version in the header is read from the source, not typed by hand.

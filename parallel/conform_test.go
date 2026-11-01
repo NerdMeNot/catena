@@ -105,6 +105,7 @@ var dedicatedCovered = map[string]string{
 	"Retry":      "TestRetry",
 	"Limit":      "TestLimit",
 	"Do":         "TestDo",
+	"Backoff":    "TestBackoff",
 }
 
 // ---- fixtures ----

@@ -1,8 +1,8 @@
 // Package parallel holds catena's concurrency and time operators: the ones that
 // start goroutines, which the core package never does.
 //
-// Every operator here is a stage — a function from a sequence to its
-// result — built to sit in a chain through Seq.Then:
+// Most operators here are stages — functions from a sequence to its
+// result — built to sit in a chain through Seq.Then or Try.Then:
 //
 //	bodies, err := catena.FromSlice(urls).
 //		Filter(isHTTPS).
@@ -35,7 +35,8 @@
 //
 // Retry and Limit are not stages but wrappers for a callback: each returns
 // a function of the same shape, with retries or a rate limit, to hand to
-// any stage. Do runs a handful of different functions at once.
+// any stage; Backoff makes the usual wait between retries. Do runs a
+// handful of different functions at once.
 //
 // There are two execution models, and each operator says which it is. The
 // caller-driven stages (Map, MapUnordered, ForEach and their Try forms)
@@ -54,6 +55,14 @@ import (
 func posCheck[N int | time.Duration](op, arg string, n N) {
 	if n <= 0 {
 		panic("parallel: " + op + ": " + arg + " must be > 0")
+	}
+}
+
+// nilCheck panics for a function argument that must not be nil, at
+// construction rather than at the first call.
+func nilCheck(op, arg string, isNil bool) {
+	if isNil {
+		panic("parallel: " + op + ": " + arg + " is nil")
 	}
 }
 

@@ -1,7 +1,7 @@
 // Sources: the producers in catena/source open what they read inside the
 // iteration, so a pipeline that is built holds nothing, and a pipeline
-// that stops early releases what it opened. Lines reads a file; CSV and
-// JSONLines read records, where one bad record is an element rather than
+// that stops early releases what it opened. Lines reads a file; CSVHeader
+// and JSONLines read records, where one bad record is an element rather than
 // the end; Paginate walks a paginated API and fetches no page it does not
 // need; and all of them feed a concurrent stage like any other sequence.
 package main
@@ -76,8 +76,8 @@ func main() {
 	fmt.Printf("all %d users, in %d requests\n", len(all), directory.requests)
 
 	// A source is a Try, and MapTry takes one as it is: a page that
-	// failed would arrive in its place, without a call made for it, and
-	// the terminal still decides what a failure means.
+	// failed to fetch would arrive as the last element, without a call
+	// made for it, and the terminal still decides what a failure means.
 	greet := func(_ context.Context, u User) (string, error) {
 		return "hello, " + u.Name, nil
 	}
@@ -86,13 +86,16 @@ func main() {
 		Collect()
 	fmt.Println(greetings, err)
 
-	// CSV yields records. A row someone broke by hand is an element of
-	// its own — a *csv.ParseError naming the line — and the rows after it
-	// still come, so CollectAll keeps every good one.
+	// CSVHeader reads the header row and yields each record after it,
+	// with its fields by column name. A row someone broke by hand is an
+	// element of its own — a *csv.ParseError naming the line — and the
+	// rows after it still come, so CollectAll keeps every good one. (Plain
+	// CSV is for data with no header; Drop(1) would also drop a failure to
+	// open the file, as if it were the header.)
 	csvPath := writeTemp("*.csv", "sku,qty\nkbd-01,3\nmse-07,2\"\nmon-27,1\n")
 	defer os.Remove(csvPath)
-	stock, bad := source.CSV(func() (io.ReadCloser, error) { return os.Open(csvPath) }, nil).
-		Drop(1). // the header
+	stock, bad := source.CSVHeader(func() (io.ReadCloser, error) { return os.Open(csvPath) }, nil).
+		Map(func(r source.Record) string { return r.Get("sku") + " x" + r.Get("qty") }).
 		CollectAll()
 	fmt.Println("stock rows:", stock)
 	fmt.Println("bad rows:  ", bad)
@@ -108,7 +111,7 @@ func main() {
 {"user":"cy","page":"/docs"}
 `)
 	defer os.Remove(logPath)
-	events, broken := source.JSONLines[Event](func() (io.ReadCloser, error) { return os.Open(logPath) }).
+	events, broken := source.JSONLines[Event](func() (io.ReadCloser, error) { return os.Open(logPath) }, nil).
 		CollectAll()
 	fmt.Println("events:", events, "broken:", broken)
 

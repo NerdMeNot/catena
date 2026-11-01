@@ -1,6 +1,6 @@
 # Concurrency
 
-The operators that start goroutines, in the `catena/parallel` package — the core package never does. Each is a stage that sits in a chain through `Seq.Then` or `Try.Then`, and each joins every goroutine it started before its iteration returns: on a normal end, an early break, a cancelled context and a panic alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently while the source stays on the consumer's goroutine, and their `Try` forms do the same for input that can already fail; `Buffer`, `ChunkedWithin` and `Merge` run the source itself on a goroutine of its own. `Do` runs a few different functions at once, and `Retry` and `Limit` wrap a callback with retries or a rate limit, starting nothing. The [concurrency guide](../06-concurrency.md) explains the two models.
+The operators that start goroutines, in the `catena/parallel` package — the core package never does. The stages sit in a chain through `Seq.Then` or `Try.Then`, and each joins every goroutine it started before its iteration returns: on a normal end, an early break, a cancelled context and a panic alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently while the source stays on the consumer's goroutine, and their `Try` forms do the same for input that can already fail; `Buffer`, `ChunkedWithin` and `Merge` run the source itself on a goroutine of its own. `Do` runs a few different functions at once, and `Retry` and `Limit` wrap a callback with retries or a rate limit, starting nothing; `Backoff` makes the usual wait between retries. The [concurrency guide](../06-concurrency.md) explains the two models.
 
 Every example below is complete: the function being run concurrently is written out, because seeing that it is an ordinary function is most of understanding what this package is for. The ones that make HTTP requests talk to `shopURL`, a small server the tests start, so they are verified against real requests.
 
@@ -10,7 +10,7 @@ Every example below is complete: the function being run concurrently is written 
 func Map[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U]
 ```
 
-Map returns a stage that yields f applied to each element, running up to n calls at once and yielding results in source order. A failed call yields (zero, err) and the stage continues. When ctx is done the stage stops consuming, yields (zero, ctx.Err()) once in place of any results it still held, and ends; over an empty source it yields nothing. f receives a context that is also cancelled the moment the consumer stops. The source runs on the consumer's goroutine. Panics if n <= 0.
+Map returns a stage that yields f applied to each element, running up to n calls at once and yielding results in source order. A failed call yields (zero, err) and the stage continues. When ctx is done the stage stops consuming, yields (zero, ctx.Err()) once in place of any results it still held, and ends; over an empty source it yields nothing. f receives a context that is also cancelled the moment the consumer stops. The source runs on the consumer's goroutine. Panics if n <= 0 or f is nil.
 
 :::caution
 - Starts up to n goroutines per iteration, all joined before it returns
@@ -142,7 +142,7 @@ bc58fc1d5d26  app-linux
 func MapUnordered[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Seq[T]) catena.Try[U]
 ```
 
-MapUnordered is Map yielding each result as soon as its call finishes rather than in source order: the same elements, bounds and error rules, with no call able to delay another. Panics if n <= 0.
+MapUnordered is Map yielding each result as soon as its call finishes rather than in source order: the same elements, bounds and error rules, with no call able to delay another. Panics if n <= 0 or f is nil.
 
 :::caution
 - Starts up to n goroutines per iteration, all joined before it returns
@@ -188,7 +188,7 @@ fmt.Println(winner, ok)
 func ForEach[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Seq[T]) error
 ```
 
-ForEach returns a terminal stage that calls f for each element, up to n calls at once, and returns the first error to occur — a call's own, or ctx.Err() — or nil once every call has succeeded. "First" is first in time, not in source order. A done ctx is an error even if every call that ran succeeded. On an error the remaining calls are cancelled through their context and joined before it returns. Panics if n <= 0.
+ForEach returns a terminal stage that calls f for each element, up to n calls at once, and returns the first error to occur — a call's own, or ctx.Err() — or nil once every call has succeeded. "First" is first in time, not in source order. A done ctx is an error even if every call that ran succeeded. On an error the remaining calls are cancelled through their context and joined before it returns. Panics if n <= 0 or f is nil.
 
 :::caution
 - Starts up to n goroutines, all joined before it returns
@@ -230,7 +230,7 @@ purged on 6 nodes, err: <nil>
 func MapTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Try[T]) catena.Try[U]
 ```
 
-MapTry is Map for a sequence that already carries errors: an errored element is never passed to f — no call is made for it — and is yielded as it arrived, in its place among the results. Everything else is Map's: order, bounds, cancellation. It lets a pipeline go concurrent without first deciding what its errors mean. Panics if n <= 0.
+MapTry is Map for a sequence that already carries errors: an errored element is never passed to f — no call is made for it — and is yielded as it arrived, in its place among the results. Everything else is Map's: order, bounds, cancellation. It lets a pipeline go concurrent without first deciding what its errors mean. Panics if n <= 0 or f is nil.
 
 :::caution
 - Starts up to n goroutines per iteration, all joined before it returns
@@ -287,7 +287,7 @@ product 999: 404 Not Found
 func MapUnorderedTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Try[T]) catena.Try[U]
 ```
 
-MapUnorderedTry is MapUnordered for a sequence that already carries errors: an errored element is never passed to f, and is yielded as soon as it arrives. Panics if n <= 0.
+MapUnorderedTry is MapUnordered for a sequence that already carries errors: an errored element is never passed to f, and is yielded as soon as it arrives. Panics if n <= 0 or f is nil.
 
 :::caution
 - Starts up to n goroutines per iteration, all joined before it returns
@@ -330,7 +330,7 @@ warmed 3 skipped 1
 func ForEachTry[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Try[T]) error
 ```
 
-ForEachTry is ForEach for a sequence that already carries errors: an errored element is an error like a failed call's, so the first error in time — the source's or a call's — is returned, and the calls still running are cancelled and joined first. Panics if n <= 0.
+ForEachTry is ForEach for a sequence that already carries errors: an errored element is an error like a failed call's, so the first error in time — the source's or a call's — is returned, and the calls still running are cancelled and joined first. Panics if n <= 0 or f is nil.
 
 :::caution
 - Starts up to n goroutines, all joined before it returns
@@ -375,7 +375,7 @@ bad node name "sin 1"
 func Do(ctx context.Context, fns ...func(context.Context) error) error
 ```
 
-Do runs every function at once and returns the first error to occur, or nil once all have succeeded: ForEach for calls that are each different rather than one call per element — the three loads a page needs, say. Each function receives a context that is cancelled when another fails or ctx is done, and every one has returned before Do does, so whatever they wrote can be read safely after it. A done ctx is an error even if every function succeeded. With no functions it returns nil.
+Do runs every function at once and returns the first error to occur, or nil once all have succeeded: ForEach for calls that are each different rather than one call per element — the three loads a page needs, say. Each function receives a context that is cancelled when another fails or ctx is done, and every one has returned before Do does, so whatever they wrote can be read safely after it. A done ctx is an error even if every function succeeded, and a ctx already done when Do is called returns its error without calling any. With no functions it returns nil. Panics, before calling any, if a function is nil.
 
 :::caution
 Starts one goroutine per function, all joined before it returns
@@ -419,13 +419,13 @@ ada [1001 1004] monitor <nil>
 ## Retry
 
 ```go
-func Retry[T, U any](attempts int, backoff func(attempt int) time.Duration, retryable func(error) bool, f func(context.Context, T) (U, error)) func(context.Context, T) (U, error)
+func Retry[T, U any](attempts int, backoff func(attempt int, err error) time.Duration, retryable func(error) bool, f func(context.Context, T) (U, error)) func(context.Context, T) (U, error)
 ```
 
-Retry returns f made to try again when it fails: up to attempts tries in all, waiting backoff(k) after failed try k (1, 2, …) before the next. It stops at the first success, after the last try, when retryable reports false for the error, or when ctx is done — a wait cut short by ctx returns the last try's error and makes no further try. A nil retryable retries every error, and a nil backoff never waits. A panic in f is not retried. Panics if attempts <= 0.
+Retry returns f made to try again when it fails: up to attempts tries in all, waiting backoff(k, err) after failed try k (1, 2, …), err being that try's error, before the next. It stops at the first success, after the last try, or when retryable reports false for the error, and returns that try's result. A nil retryable retries every error; a nil backoff never waits, and Backoff makes the usual one. Having the error, a backoff can honour a server's own advice, such as a Retry-After header the error carries. It also stops when ctx is done, between tries or during a wait, and then returns the last try's error joined with ctx.Err(), so that errors.Is finds either. A panic in f is not retried. What it returns has the shape of f, so it goes anywhere f does, such as the callback of Map. Panics if attempts <= 0 or f is nil.
 
 :::caution
-What it returns has the shape of f, so it goes anywhere f does:  parallel.Map(ctx, 8, parallel.Retry(3, backoff, isTransient, fetch))  ⚠ Starts no goroutines: it waits on the goroutine that called it, for up to the sum of the backoffs
+Starts no goroutines: it waits on the goroutine that called it, for up to the sum of the backoffs
 :::
 
 ```go
@@ -449,9 +449,10 @@ inStock := func(ctx context.Context, sku string) (string, error) {
 	return sku + " in stock", nil
 }
 transient := func(err error) bool { return errors.Is(err, errUnavailable) }
-backoff := func(attempt int) time.Duration { return time.Duration(attempt) * time.Millisecond }
 
-// Up to three tries each, four items at a time.
+// Up to three tries each, four items at a time, waiting a little
+// longer after each failure: about 1ms, then 2ms.
+backoff := parallel.Backoff(time.Millisecond, 10*time.Millisecond)
 checked, err := catena.Of("kbd-01", "mse-07", "mon-27").
 	Then(parallel.Map(context.Background(), 4, parallel.Retry(3, backoff, transient, inStock))).
 	Collect()
@@ -462,16 +463,49 @@ fmt.Println(checked, err)
 [kbd-01 in stock mse-07 in stock mon-27 in stock] <nil>
 ```
 
+## Backoff
+
+```go
+func Backoff(base, ceiling time.Duration) func(attempt int, err error) time.Duration
+```
+
+Backoff returns a backoff for Retry that grows exponentially: a wait of up to base after the first failed try, doubling after each one after it, never more than ceiling. Each wait is drawn at random from the upper half of that — between 50 and 100ms, where it is 100ms — so that callers that failed together do not all try again together. It ignores the error, so a backoff that honours one — a Retry-After it carries — can fall back to it when there is none. Panics if base <= 0 or ceiling < base.
+
+:::caution
+Starts nothing and holds nothing; the randomness is math/rand/v2's
+:::
+
+```go
+// The waits Backoff gives grow from base and stop at the ceiling, and
+// each is drawn from the upper half of its range so that callers that
+// failed together do not all come back together.
+backoff := parallel.Backoff(100*time.Millisecond, time.Second)
+for attempt := 1; attempt <= 6; attempt++ {
+	d := backoff(attempt, nil)
+	ceiling := min(100*time.Millisecond<<(attempt-1), time.Second)
+	fmt.Printf("after try %d: between %v and %v: %v\n", attempt, ceiling/2, ceiling, d >= ceiling/2 && d <= ceiling)
+}
+```
+
+```
+after try 1: between 50ms and 100ms: true
+after try 2: between 100ms and 200ms: true
+after try 3: between 200ms and 400ms: true
+after try 4: between 400ms and 800ms: true
+after try 5: between 500ms and 1s: true
+after try 6: between 500ms and 1s: true
+```
+
 ## Limit
 
 ```go
 func Limit[T, U any](n int, per time.Duration, f func(context.Context, T) (U, error)) func(context.Context, T) (U, error)
 ```
 
-Limit returns f made to keep to a rate: at most n calls are let through to f in any period of length per — 50 a second is Limit(50, time.Second, f). A call over the limit waits for its turn; if ctx is done first it returns (zero, ctx.Err()) without calling f, and the turn it was given is spent. Calls take their turns in the order they arrive. The rate is kept when calls are let through: a goroutine the scheduler is slow to resume can reach f later than its turn, as with any limiter on the calling side, so leave a server's limit some headroom. The limit is shared by every call of the function it returns, across stages and iterations: make one per quota and pass it wherever that quota applies. Panics if n <= 0 or per <= 0.
+Limit returns f made to keep to a rate: at most n calls are let through to f in any period of length per — 50 a second is Limit(50, time.Second, f). A call over the limit waits for its turn; if ctx is done first it returns (zero, ctx.Err()) without calling f, and the turn it was given is spent. Calls take their turns in the order they arrive. The rate is kept when calls are let through: a goroutine the scheduler is slow to resume can reach f later than its turn, as with any limiter on the calling side, so leave a server's limit some headroom. The limit is shared by every call of the function it returns, across stages and iterations: make one per quota and pass it wherever that quota applies. Wrapped around f inside Retry — Retry(…, Limit(…, f)) — every try counts against it. Panics if n <= 0, per <= 0 or f is nil.
 
 :::caution
-- Wrapped around f inside Retry, every try counts against it:  parallel.Retry(3, backoff, isTransient, parallel.Limit(50, time.Second, fetch))  ⚠ Starts no goroutines: a call waits on the goroutine that made it
+- Starts no goroutines: a call waits on the goroutine that made it
 - Holds the start times of the last n calls
 :::
 

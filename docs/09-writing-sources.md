@@ -1,7 +1,8 @@
 # Writing your own source
 
 catena ships sources for the common starting points — `source.Lines`,
-`source.CSV`, `source.JSONLines`, `source.Paginate` and `sqlsource.Rows` —
+`source.CSV`, `source.CSVHeader`, `source.JSONLines`, `source.Paginate`
+and `sqlsource.Rows` —
 and stops there on purpose: a source for Kafka, S3 or your company's
 internal API would bring a dependency with it, and the shape is short
 enough to write. This guide is that shape, the rules that make a source
@@ -82,7 +83,8 @@ line of code, and each is easy to forget.
   downstream `Take` or `First` stops it early, and when a callback
   downstream panics. There is no `Close` on an iterator; `defer` is the
   close.
-- **Stop the moment `yield` returns false.** Calling it again panics.
+- **Stop the moment `yield` returns false.** Calling it again panics under
+  a `range` loop, and is a bug everywhere.
   Return, or tell the API you are wrapping to stop.
 - **A failure to open is the only element.** Yield it and return.
 - **Tell the two kinds of failure apart.** If the source itself fails —

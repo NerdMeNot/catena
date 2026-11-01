@@ -991,7 +991,7 @@ listening on 9090
 func (t Try[T]) Then[U any](f func(Try[T]) U) U
 ```
 
-Then returns f(t): Seq.Then for a sequence that carries errors. It lets a function taking a Try sit inside a chain — chiefly the parallel package's Try stages, so a pipeline can go concurrent without first deciding what its errors mean:  t.Filter(isBig).Then(parallel.MapTry(ctx, 8, enrich)).CollectAll()  A function needing more arguments goes in a closure.
+Then returns f(t): Seq.Then for a sequence that carries errors. It lets a function taking a Try sit inside a chain — chiefly the parallel package's Try stages, as in t.Then(parallel.MapTry(ctx, 8, enrich)), so a pipeline can go concurrent without first deciding what its errors mean. A function needing more arguments goes in a closure.
 
 ```go
 // Then keeps a Try in the chain through a function that takes one —

@@ -122,8 +122,7 @@ func main() {
 	// keeps every try within the quota, however many workers are calling.
 	api.requests.Store(0)
 	unavailable := func(err error) bool { return errors.Is(err, errUnavailable) }
-	backoff := func(attempt int) time.Duration { return time.Duration(attempt) * 5 * time.Millisecond }
-	check := parallel.Retry(3, backoff, unavailable,
+	check := parallel.Retry(3, parallel.Backoff(5*time.Millisecond, 50*time.Millisecond), unavailable,
 		parallel.Limit(10, 100*time.Millisecond, api.warehouseStock))
 	skus := catena.Of("kbd-01", "mse-07", "mon-27", "cam-02", "hub-04", "cbl-09", "dock-3", "pen-11")
 	checked, err := skus.Then(parallel.Map(ctx, 8, check)).Collect()

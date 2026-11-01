@@ -102,8 +102,8 @@ That is structured concurrency, and it has one cost you should know
 before you rely on it: **stopping waits.** A stage that must join its
 goroutines cannot return while one of them is still running. So:
 
-- A callback given to `Map`, `MapUnordered` or `ForEach` must honour its
-  context. The context it receives is cancelled the moment the consumer
+- A callback given to `Map`, `MapUnordered` or `ForEach`, their `Try`
+  forms or `Do` must honour its context. The context it receives is cancelled the moment the consumer
   stops; a callback that ignores it keeps the stage waiting until it
   finishes on its own.
 - A source behind `Buffer`, `ChunkedWithin` or `Merge` must return from
@@ -117,9 +117,9 @@ the context your source or callback reads.
 
 ## Two execution models
 
-Every operator is one of two kinds, and its doc comment says which.
+Every stage is one of two kinds, and its doc comment says which.
 
-| | `Map`, `MapUnordered`, `ForEach` | `Buffer`, `ChunkedWithin`, `Merge` |
+| | `Map`, `MapUnordered`, `ForEach` and their `Try` forms | `Buffer`, `ChunkedWithin`, `Merge` |
 |---|---|---|
 | The source runs on | your goroutine | a goroutine of its own |
 | What runs concurrently | only the callback | everything upstream of the stage |
@@ -254,21 +254,29 @@ take a callback and return one of the same shape, with that built in, so
 they go wherever a callback does. Neither starts a goroutine.
 
 ```go
-fetch := parallel.Retry(3, backoff, isTransient, // up to three tries, for errors worth retrying
-    parallel.Limit(50, time.Second, getProduct)) // and never more than 50 a second
+fetch := parallel.Retry(3,                       // up to three tries,
+    parallel.Backoff(100*time.Millisecond, 5*time.Second), // waiting longer each time,
+    isTransient,                                  // for the errors worth retrying,
+    parallel.Limit(50, time.Second, getProduct))  // and never more than 50 a second
 
 products, err := catena.FromSlice(ids).
     Then(parallel.Map(ctx, 8, fetch)).
     Collect()
 ```
 
-- `Retry` waits `backoff(k)` after failed try `k`, and asks the predicate
-  whether an error is worth another try — a timeout or a 503 is, a 404 is
-  not; nil retries everything. A done context ends the waiting.
+- `Retry` waits `backoff(k, err)` after failed try `k`, and asks the
+  predicate whether an error is worth another try — a timeout or a 503
+  is, a 404 is not; nil retries everything. The backoff is given the
+  error, so it can honour a `Retry-After` the server sent; `Backoff` is
+  the usual exponential one, with jitter so that callers which failed
+  together do not all come back together. A done context ends the
+  waiting, and the error then carries both the last try's failure and
+  the context's.
 - `Limit` lets at most `n` calls through in any period of length `per`,
   however many workers are calling. It is shared by every use of the
   function it returns, so make one per quota and pass it everywhere that
-  quota applies.
+  quota applies. A call that gives up waiting — its context done — still
+  spends its turn.
 - Order matters. With `Limit` inside `Retry`, as above, every try counts
   against the limit — which is what the server counts. The other way
   round, a call and all its retries would take one turn.

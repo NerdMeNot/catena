@@ -18,11 +18,11 @@ The operators people reach for most, by the job rather than the name.
 | Process in batches of N | [`Chunked`](operators/07-batching.md#chunked) |
 | Batch a live stream by size or time | [`parallel.ChunkedWithin`](operators/15-concurrency.md#chunkedwithin) |
 | Match two lists by a key | [`JoinBy`](operators/05-combining.md#joinby), [`LeftJoinBy`](operators/05-combining.md#leftjoinby) |
-| Read a file line by line, a CSV, or JSON Lines | [`source.Lines`](operators/16-sources.md#lines), [`source.CSV`](operators/16-sources.md#csv), [`source.JSONLines`](operators/16-sources.md#jsonlines) |
+| Read a file line by line, a CSV, or JSON Lines | [`source.Lines`](operators/16-sources.md#lines), [`source.CSVHeader`](operators/16-sources.md#csvheader), [`source.JSONLines`](operators/16-sources.md#jsonlines) |
 | Read the rows of a query, the pages of an API | [`sqlsource.Rows`](operators/16-sources.md#rows), [`source.Paginate`](operators/16-sources.md#paginate) |
 | Keep going past bad records, or stop at the first | [`CollectAll`](operators/12-errors.md#collectall), [`Collect`](operators/12-errors.md#collect) |
 | Call a function for many items, several at once | [`parallel.Map`](operators/15-concurrency.md#map), [`parallel.MapTry`](operators/15-concurrency.md#maptry) |
-| Retry a flaky call, or keep to a rate limit | [`parallel.Retry`](operators/15-concurrency.md#retry), [`parallel.Limit`](operators/15-concurrency.md#limit) |
+| Retry a flaky call, or keep to a rate limit | [`parallel.Retry`](operators/15-concurrency.md#retry) with [`parallel.Backoff`](operators/15-concurrency.md#backoff), [`parallel.Limit`](operators/15-concurrency.md#limit) |
 | Run a few different calls at once | [`parallel.Do`](operators/15-concurrency.md#do) |
 
 Markers: **⚠ mem** buffers beyond O(1), with its bound · **⚠∞** fully
@@ -177,7 +177,7 @@ emitted slice is fresh; retaining one is always safe.
 ## Concurrency (`catena/parallel`)
 
 The operators that start goroutines, as stages for `Seq.Then` and
-`Try.Then`, and the callback wrappers `Retry` and `Limit`. Every one
+`Try.Then`, and `Do`; and the callback wrappers `Retry` and `Limit`. Every one
 joins its goroutines before its iteration returns. See
 [06-concurrency.md](06-concurrency.md).
 
@@ -186,9 +186,10 @@ joins its goroutines before its iteration returns. See
 | `parallel.Map(ctx, n, f)` | → `Try`; `n` calls at once, results in source order; ⚠ mem `n` results; source stays on the consumer's goroutine |
 | `parallel.MapUnordered(ctx, n, f)` | → `Try`; results as calls finish; ⚠ mem `n` |
 | `parallel.ForEach(ctx, n, f)` | terminal; first error, the rest cancelled and joined; ⚠∞ on success |
-| `parallel.MapTry`, `MapUnorderedTry`, `ForEachTry` | the same, from a `Try`: an errored element makes no call and passes through in place (via `Try.Then`) |
+| `parallel.MapTry`, `MapUnorderedTry`, `ForEachTry` | the same, from a `Try` via `Try.Then`: an errored element makes no call — `MapTry` keeps it in place, `MapUnorderedTry` yields it at once, `ForEachTry` treats it as a failed call |
 | `parallel.Do(ctx, fns...)` | runs different functions at once; first error, the rest cancelled and joined |
-| `parallel.Retry(attempts, backoff, retryable, f)` | wraps a callback: tries again with backoff, for the errors you say; no goroutines |
+| `parallel.Retry(attempts, backoff, retryable, f)` | wraps a callback: tries again, waiting `backoff(k, err)`, for the errors you say; no goroutines |
+| `parallel.Backoff(base, ceiling)` | the usual backoff for `Retry`: exponential, capped, with jitter |
 | `parallel.Limit(n, per, f)` | wraps a callback: at most `n` calls let through per `per`, shared by every use; no goroutines |
 | `parallel.Buffer[T](n)` | read-ahead on a goroutine of its own; ⚠ mem `n`; upstream runs concurrently with the consumer |
 | `parallel.ChunkedWithin[T](n, d)` | → `Seq[[]T]`; a chunk at `n` elements or `d` after its first; never empty; ⚠ mem `n` |
@@ -202,8 +203,9 @@ every exit. All return a `Try`.
 | Operator | Notes |
 |---|---|
 | `source.Lines(open)` | lines of a reader, any length, endings stripped; ⚠ mem one line |
-| `source.CSV(open, setup)` | records of CSV data; a malformed record is an element and reading continues; ⚠ mem one record |
-| `source.JSONLines[T](open)` | one JSON value per line; a line that does not decode is an element and reading continues; ⚠ mem one line |
+| `source.CSV(open, setup)` | records of CSV data with no header; a malformed record is an element and reading continues; ⚠ mem one record |
+| `source.CSVHeader(open, setup)` | CSV with a header row: each record a `Record`, its fields by column name; a header that cannot be read ends it |
+| `source.JSONLines[T](open, setup)` | one JSON value per line; a line that does not decode is an element and reading continues; ⚠ mem one line |
 | `source.Paginate(first, fetch)` | a page is fetched only once the one before it is yielded in full; ⚠ mem one page |
 | `sqlsource.Rows(open, scan)` | rows of a query; a failed scan is an element and iteration continues |
 
