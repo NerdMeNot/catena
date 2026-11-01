@@ -41,7 +41,7 @@
         },
         {
           "label": "API on pkg.go.dev",
-          "link": "https://pkg.go.dev/github.com/NerdMeNot/catena@v1.3.0",
+          "link": "https://pkg.go.dev/github.com/NerdMeNot/catena@v1.4.0",
           "attrs": {
             "target": "_blank",
             "rel": "noopener noreferrer"

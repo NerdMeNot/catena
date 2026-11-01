@@ -1,11 +1,11 @@
 ---
 title: "Sources"
-description: "Ready-made producers for what pipelines most often start from, in the catena/source and catena/source/sqlsource packages. Each takes a function that opens its resource rather than an open resource, and calls it inside the iteration: a pipeline that is built but never consumed opens nothing, and any exit — the end, an early stop, a panic — releases it. All of them return a Try, so a failure is an element the consumer decides about."
+description: "Ready-made producers for what pipelines most often start from — lines, CSV, JSON Lines, pages and rows — in the catena/source and catena/source/sqlsource packages. Each takes a function that opens its resource rather than an open resource, and calls it inside the iteration: a pipeline that is built but never consumed opens nothing, and any exit — the end, an early stop, a panic — releases it. All of them return a Try. A failure of the source ends it; a failure of one record — a malformed row, a line that does not decode — is an element in its place, and the records after it still come. For anything not here, writing your own source is the same shape."
 sidebar:
   order: 16
 ---
 
-Ready-made producers for what pipelines most often start from, in the `catena/source` and `catena/source/sqlsource` packages. Each takes a function that opens its resource rather than an open resource, and calls it inside the iteration: a pipeline that is built but never consumed opens nothing, and any exit — the end, an early stop, a panic — releases it. All of them return a `Try`, so a failure is an element the consumer decides about.
+Ready-made producers for what pipelines most often start from — lines, CSV, JSON Lines, pages and rows — in the `catena/source` and `catena/source/sqlsource` packages. Each takes a function that opens its resource rather than an open resource, and calls it inside the iteration: a pipeline that is built but never consumed opens nothing, and any exit — the end, an early stop, a panic — releases it. All of them return a `Try`. A failure of the source ends it; a failure of one record — a malformed row, a line that does not decode — is an element in its place, and the records after it still come. For anything not here, [writing your own source](/guides/writing-sources/) is the same shape.
 
 ## Lines
 
@@ -40,6 +40,83 @@ fmt.Println("opened after consuming:", opened)
 opened after building: 0
 [GET /a GET /c]
 opened after consuming: 1
+```
+
+## CSV
+
+```go
+func CSV(open func() (io.ReadCloser, error), setup func(*csv.Reader)) catena.Try[[]string]
+```
+
+CSV yields the records of the CSV data that open returns, as read by encoding/csv: each one a fresh slice of its fields. setup, if not nil, configures the reader before the first record — its separator, comment character, expected field count and so on — and ReuseRecord is turned off after it, since a lazy pipeline may hold on to a record. open is called once per iteration, inside it, and the reader is closed on every exit. A record that cannot be parsed — a stray quote, the wrong number of fields — is yielded as (nil, err), err a *csv.ParseError naming its line, and reading continues with the next record; a failure to open or to read ends the sequence. An opening quote that is never closed takes the rest of the input with it, as encoding/csv reads it, and is one error. A header row is a record like any other: Drop(1) skips it.
+
+:::caution
+Holds one record in memory
+:::
+
+```go
+// A customer export, with a header, a row someone broke by hand, and a
+// note that runs over two lines inside its quotes.
+export := "id,name,note\n" +
+	"1,ada,\"prefers email,\nnot phone\"\n" +
+	"2,bob,\"\"vip\"\n" + // a stray quote: this row cannot be parsed
+	"3,cy,\n"
+rows := source.CSV(func() (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader(export)), nil // os.Open(path) in real code
+}, nil)
+
+// The broken row is an element, not the end: CollectAll keeps every
+// good row and says which line was wrong.
+names, problems := rows.Drop(1). // the header
+					Map(func(r []string) string { return r[1] }).
+					CollectAll()
+fmt.Println(names)
+fmt.Println(problems)
+```
+
+```
+[ada cy]
+[parse error on line 4, column 8: extraneous or missing " in quoted-field]
+```
+
+## JSONLines
+
+```go
+func JSONLines[T any](open func() (io.ReadCloser, error)) catena.Try[T]
+```
+
+JSONLines yields the values of the JSON Lines data that open returns: each line decoded into a T by encoding/json. Blank lines are skipped. A line that does not decode is yielded as (zero, err), err wrapping json's error with the line's number ("line 3: …"), and reading continues; a failure to open or to read ends the sequence. open is called once per iteration, inside it, and the reader is closed on every exit.
+
+:::caution
+Holds one line, however long, in memory
+:::
+
+```go
+// Click events, one JSON object per line, as most log shippers and
+// data exports write them. One line was cut off mid-write.
+type Event struct {
+	User string `json:"user"`
+	Page string `json:"page"`
+}
+log := `{"user":"ada","page":"/pricing"}
+{"user":"bob","page":"/docs"}
+{"user":"ada","pa
+{"user":"cy","page":"/pricing"}
+`
+events := source.JSONLines[Event](func() (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader(log)), nil
+})
+
+views, bad := events.
+	Filter(func(e Event) bool { return e.Page == "/pricing" }).
+	CollectAll()
+fmt.Println(views)
+fmt.Println(bad)
+```
+
+```
+[{ada /pricing} {cy /pricing}]
+[line 3: unexpected end of JSON input]
 ```
 
 ## Paginate

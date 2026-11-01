@@ -131,14 +131,15 @@ const box = [
   {
     name: 'catena/parallel',
     href: '/guides/concurrency/',
-    body: `Call a function for many inputs at once, bounded and in order. Batch a live
-           stream by size or by time. Nothing outlives the call.`,
+    body: `Call a function for many inputs at once, bounded and in order, with retries and a
+           rate limit when the far end needs them. Batch a live stream by size or by time.
+           Nothing outlives the call.`,
   },
   {
     name: 'catena/source',
     href: '/operators/sources/',
-    body: `Lines of a file, pages of an API, rows of a query — opened when the pipeline
-           runs, released on every exit, including the early ones.`,
+    body: `Lines of a file, CSV, JSON Lines, pages of an API, rows of a query — opened when
+           the pipeline runs, released on every exit, including the early ones.`,
   },
   {
     name: 'catenalint',

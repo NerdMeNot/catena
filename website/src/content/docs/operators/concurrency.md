@@ -1,11 +1,11 @@
 ---
 title: "Concurrency"
-description: "The operators that start goroutines, in the catena/parallel package — the core package never does. Each is a stage that sits in a chain through Seq.Then, and each joins every goroutine it started before its iteration returns: on a normal end, an early break, a cancelled context and a panic alike. Map, MapUnordered and ForEach run a callback concurrently while the source stays on the consumer's goroutine; Buffer, ChunkedWithin and Merge run the source itself on a goroutine of its own. The concurrency guide explains the two models."
+description: "The operators that start goroutines, in the catena/parallel package — the core package never does. Each is a stage that sits in a chain through Seq.Then or Try.Then, and each joins every goroutine it started before its iteration returns: on a normal end, an early break, a cancelled context and a panic alike. Map, MapUnordered and ForEach run a callback concurrently while the source stays on the consumer's goroutine, and their Try forms do the same for input that can already fail; Buffer, ChunkedWithin and Merge run the source itself on a goroutine of its own. Do runs a few different functions at once, and Retry and Limit wrap a callback with retries or a rate limit, starting nothing. The concurrency guide explains the two models."
 sidebar:
   order: 15
 ---
 
-The operators that start goroutines, in the `catena/parallel` package — the core package never does. Each is a stage that sits in a chain through `Seq.Then`, and each joins every goroutine it started before its iteration returns: on a normal end, an early break, a cancelled context and a panic alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently while the source stays on the consumer's goroutine; `Buffer`, `ChunkedWithin` and `Merge` run the source itself on a goroutine of its own. The [concurrency guide](/guides/concurrency/) explains the two models.
+The operators that start goroutines, in the `catena/parallel` package — the core package never does. Each is a stage that sits in a chain through `Seq.Then` or `Try.Then`, and each joins every goroutine it started before its iteration returns: on a normal end, an early break, a cancelled context and a panic alike. `Map`, `MapUnordered` and `ForEach` run a callback concurrently while the source stays on the consumer's goroutine, and their `Try` forms do the same for input that can already fail; `Buffer`, `ChunkedWithin` and `Merge` run the source itself on a goroutine of its own. `Do` runs a few different functions at once, and `Retry` and `Limit` wrap a callback with retries or a rate limit, starting nothing. The [concurrency guide](/guides/concurrency/) explains the two models.
 
 Every example below is complete: the function being run concurrently is written out, because seeing that it is an ordinary function is most of understanding what this package is for. The ones that make HTTP requests talk to `shopURL`, a small server the tests start, so they are verified against real requests.
 
@@ -229,12 +229,168 @@ fmt.Println("purged on", purged.Load(), "nodes, err:", err)
 purged on 6 nodes, err: <nil>
 ```
 
-### Different calls
+## MapTry
 
 ```go
-// Not the same call for many inputs, but three different calls a
-// dashboard needs, with nothing to do with each other. Put the
-// functions themselves in the sequence.
+func MapTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Try[T]) catena.Try[U]
+```
+
+MapTry is Map for a sequence that already carries errors: an errored element is never passed to f — no call is made for it — and is yielded as it arrived, in its place among the results. Everything else is Map's: order, bounds, cancellation. It lets a pipeline go concurrent without first deciding what its errors mean. Panics if n <= 0.
+
+:::caution
+- Starts up to n goroutines per iteration, all joined before it returns
+- Consumes at most n elements beyond those yielded, an errored one included, and holds their results
+- A finished result is delivered only when the source next yields or ends
+:::
+
+```go
+// The product ids come from a file someone typed, so parsing them can
+// fail — and that should not stop the lookups for the ids that did
+// parse. MapTry takes the Try as it is: a bad id is never requested,
+// and arrives in its place among the results.
+type Product struct {
+	ID   int
+	Name string
+}
+getProduct := func(ctx context.Context, id int) (Product, error) {
+	var p Product
+	url := fmt.Sprintf("%s/products/%d", shopURL, id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return p, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return p, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return p, fmt.Errorf("product %d: %s", id, resp.Status)
+	}
+	return p, json.NewDecoder(resp.Body).Decode(&p)
+}
+
+ids := catena.Of("101", "1O2", "103", "999").MapErr(strconv.Atoi)
+products, problems := ids.
+	Then(parallel.MapTry(context.Background(), 8, getProduct)).
+	CollectAll()
+fmt.Println(products)
+for _, err := range problems {
+	fmt.Println(err)
+}
+```
+
+```
+[{101 keyboard} {103 monitor}]
+strconv.Atoi: parsing "1O2": invalid syntax
+product 999: 404 Not Found
+```
+
+## MapUnorderedTry
+
+```go
+func MapUnorderedTry[T, U any](ctx context.Context, n int, f func(context.Context, T) (U, error)) func(catena.Try[T]) catena.Try[U]
+```
+
+MapUnorderedTry is MapUnordered for a sequence that already carries errors: an errored element is never passed to f, and is yielded as soon as it arrives. Panics if n <= 0.
+
+:::caution
+- Starts up to n goroutines per iteration, all joined before it returns
+- Consumes at most n elements beyond those yielded
+- A finished result is delivered only when the source next yields or ends
+:::
+
+```go
+// Warm the cache for every product id in a list, in whatever order
+// the responses come back. A malformed id is counted as skipped
+// without ever being requested.
+warm := func(ctx context.Context, id int) (int, error) {
+	url := fmt.Sprintf("%s/products/%d", shopURL, id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	resp.Body.Close()
+	return id, nil
+}
+
+ids := catena.Of("104", "101", "x103", "102").MapErr(strconv.Atoi)
+warmed, skipped := ids.
+	Then(parallel.MapUnorderedTry(context.Background(), 4, warm)).
+	CollectAll()
+fmt.Println("warmed", len(warmed), "skipped", len(skipped))
+```
+
+```
+warmed 3 skipped 1
+```
+
+## ForEachTry
+
+```go
+func ForEachTry[T any](ctx context.Context, n int, f func(context.Context, T) error) func(catena.Try[T]) error
+```
+
+ForEachTry is ForEach for a sequence that already carries errors: an errored element is an error like a failed call's, so the first error in time — the source's or a call's — is returned, and the calls still running are cancelled and joined first. Panics if n <= 0.
+
+:::caution
+- Starts up to n goroutines, all joined before it returns
+- Full drain on success
+:::
+
+```go
+// Purge the edge nodes named in a config file, four at a time. A
+// malformed name is an error like a failed purge: it is returned, and
+// the purges still running are cancelled and waited for first.
+purge := func(ctx context.Context, node string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, shopURL+"/purge/"+node, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: %w", node, err)
+	}
+	resp.Body.Close()
+	return nil
+}
+valid := func(name string) (string, error) {
+	if strings.ContainsAny(name, " /") {
+		return "", fmt.Errorf("bad node name %q", name)
+	}
+	return name, nil
+}
+
+nodes := catena.Of("fra1", "iad2", "sin 1", "syd1").MapErr(valid)
+err := nodes.Then(parallel.ForEachTry(context.Background(), 4, purge))
+fmt.Println(err)
+```
+
+```
+bad node name "sin 1"
+```
+
+## Do
+
+```go
+func Do(ctx context.Context, fns ...func(context.Context) error) error
+```
+
+Do runs every function at once and returns the first error to occur, or nil once all have succeeded: ForEach for calls that are each different rather than one call per element — the three loads a page needs, say. Each function receives a context that is cancelled when another fails or ctx is done, and every one has returned before Do does, so whatever they wrote can be read safely after it. A done ctx is an error even if every function succeeded. With no functions it returns nil.
+
+:::caution
+Starts one goroutine per function, all joined before it returns
+:::
+
+```go
+// A dashboard needs three unrelated things at once. Each function
+// writes its own variable; Do returns once all three have returned, so
+// reading them afterwards is safe. The first failure cancels the
+// others.
 getJSON := func(ctx context.Context, path string, into any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, shopURL+path, nil)
 	if err != nil {
@@ -253,22 +409,108 @@ var (
 	orders   []int
 	featured struct{ Name string }
 )
-loads := catena.Of(
+err := parallel.Do(context.Background(),
 	func(ctx context.Context) error { return getJSON(ctx, "/users/7/name", &name) },
 	func(ctx context.Context) error { return getJSON(ctx, "/users/7/orders", &orders) },
 	func(ctx context.Context) error { return getJSON(ctx, "/products/103", &featured) },
 )
-
-// All three run together. The first to fail cancels the others, and
-// all three have returned by the time err is set — so reading what
-// they wrote is safe.
-err := loads.Then(parallel.ForEach(context.Background(), 3,
-	func(ctx context.Context, load func(context.Context) error) error { return load(ctx) }))
 fmt.Println(name, orders, featured.Name, err)
 ```
 
 ```
 ada [1001 1004] monitor <nil>
+```
+
+## Retry
+
+```go
+func Retry[T, U any](attempts int, backoff func(attempt int) time.Duration, retryable func(error) bool, f func(context.Context, T) (U, error)) func(context.Context, T) (U, error)
+```
+
+Retry returns f made to try again when it fails: up to attempts tries in all, waiting backoff(k) after failed try k (1, 2, …) before the next. It stops at the first success, after the last try, when retryable reports false for the error, or when ctx is done — a wait cut short by ctx returns the last try's error and makes no further try. A nil retryable retries every error, and a nil backoff never waits. A panic in f is not retried. Panics if attempts <= 0.
+
+:::caution
+What it returns has the shape of f, so it goes anywhere f does:  parallel.Map(ctx, 8, parallel.Retry(3, backoff, isTransient, fetch))  ⚠ Starts no goroutines: it waits on the goroutine that called it, for up to the sum of the backoffs
+:::
+
+```go
+// The stock service is having a bad day: every item's first two
+// requests get a 503. A 503 is worth trying again; a 404 would not
+// be, so the predicate says which errors to retry.
+errUnavailable := errors.New("503 Service Unavailable")
+inStock := func(ctx context.Context, sku string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, shopURL+"/flaky/"+sku, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return "", fmt.Errorf("%s: %w", sku, errUnavailable)
+	}
+	return sku + " in stock", nil
+}
+transient := func(err error) bool { return errors.Is(err, errUnavailable) }
+backoff := func(attempt int) time.Duration { return time.Duration(attempt) * time.Millisecond }
+
+// Up to three tries each, four items at a time.
+checked, err := catena.Of("kbd-01", "mse-07", "mon-27").
+	Then(parallel.Map(context.Background(), 4, parallel.Retry(3, backoff, transient, inStock))).
+	Collect()
+fmt.Println(checked, err)
+```
+
+```
+[kbd-01 in stock mse-07 in stock mon-27 in stock] <nil>
+```
+
+## Limit
+
+```go
+func Limit[T, U any](n int, per time.Duration, f func(context.Context, T) (U, error)) func(context.Context, T) (U, error)
+```
+
+Limit returns f made to keep to a rate: at most n calls are let through to f in any period of length per — 50 a second is Limit(50, time.Second, f). A call over the limit waits for its turn; if ctx is done first it returns (zero, ctx.Err()) without calling f, and the turn it was given is spent. Calls take their turns in the order they arrive. The rate is kept when calls are let through: a goroutine the scheduler is slow to resume can reach f later than its turn, as with any limiter on the calling side, so leave a server's limit some headroom. The limit is shared by every call of the function it returns, across stages and iterations: make one per quota and pass it wherever that quota applies. Panics if n <= 0 or per <= 0.
+
+:::caution
+- Wrapped around f inside Retry, every try counts against it:  parallel.Retry(3, backoff, isTransient, parallel.Limit(50, time.Second, fetch))  ⚠ Starts no goroutines: a call waits on the goroutine that made it
+- Holds the start times of the last n calls
+:::
+
+```go
+// The API allows five requests per 50ms. Eight workers would blow
+// through that at once, so the call is limited, and the limit holds
+// across all of them.
+getProduct := func(ctx context.Context, id int) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/products/%d", shopURL, id), nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	resp.Body.Close()
+	return id, nil
+}
+
+limited := parallel.Limit(5, 50*time.Millisecond, getProduct)
+ids := catena.Of(101, 102, 103, 104, 101, 102, 103, 104, 101, 102, 103, 104)
+start := time.Now()
+got, err := ids.Then(parallel.Map(context.Background(), 8, limited)).Collect()
+
+// Twelve requests at five per 50ms: five at once, five 50ms later,
+// the last two 50ms after that.
+fmt.Println(len(got), "products, err:", err)
+fmt.Println("took at least 100ms:", time.Since(start) >= 100*time.Millisecond)
+```
+
+```
+12 products, err: <nil>
+took at least 100ms: true
 ```
 
 ## Buffer

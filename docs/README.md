@@ -19,9 +19,11 @@ Start here, read in roughly this order:
   are correct but wasteful, and for pipelines that never run.
 - **[Coming from lo, Kotlin or LINQ](08-coming-from.md)** — the name you
   know, and what catena calls it.
-- **[Releasing](09-releasing.md)** — how a release is cut and verified.
+- **[Writing your own source](09-writing-sources.md)** — the shape, the rules
+  the shipped sources follow, and how to test yours against them.
+- **[Releasing](10-releasing.md)** — how a release is cut and verified.
 
-**[Operator reference](operators/README.md)** — all 206 operators across 16 pages,
+**[Operator reference](operators/README.md)** — all 215 operators across 16 pages,
 each with its signature, its memory and termination behaviour, and a
 worked example that `go test` runs and verifies. Generated from the
 library's own doc comments and its Example functions, so it cannot drift

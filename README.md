@@ -160,8 +160,8 @@ vals        := nums.Ignore().Collect() // skip bad lines
 Producers that own a resource open it lazily *inside* the pipeline, so an
 unconsumed pipeline holds nothing and a downstream `Take(3)` still closes
 the rows — proven against the real `database/sql` stack. The ones you
-would otherwise write yourself ship in `catena/source`: `Lines`,
-`Paginate`, and `sqlsource.Rows`.
+would otherwise write yourself ship in `catena/source`: `Lines`, `CSV`,
+`JSONLines`, `Paginate`, and `sqlsource.Rows`.
 
 Callbacks that are slow run concurrently, without the pipeline changing
 shape. `Then` puts a stage in the chain; errors stay per-element, and
@@ -227,8 +227,8 @@ you can judge what the nanoseconds buy.
 
 | Package | What it adds |
 |---|---|
-| `catena/parallel` | the operators that start goroutines: `Map`, `MapUnordered`, `ForEach`, `Buffer`, `ChunkedWithin`, `Merge` |
-| `catena/source` | producers that open lazily and always release: `Lines`, `Paginate`, and `sqlsource.Rows` |
+| `catena/parallel` | the operators that start goroutines: `Map`, `MapUnordered`, `ForEach` and their `Try` forms, `Do`, `Buffer`, `ChunkedWithin`, `Merge` — and `Retry` and `Limit` to wrap a callback |
+| `catena/source` | producers that open lazily and always release: `Lines`, `CSV`, `JSONLines`, `Paginate`, and `sqlsource.Rows` |
 | `catena/lint` | a separate module: `catenalint`, which finds pipelines that sort everything to keep ten, or never run |
 
 Interop is one conversion and zero cost, in both directions:
@@ -246,7 +246,7 @@ either kind, and `Then` keeps it unbroken:
 **[catena.nerdmenot.in](https://catena.nerdmenot.in)** — the documentation
 site: every guide and the full operator reference, versioned per release.
 
-**[Operator reference](docs/operators/README.md)** — all 206 operators
+**[Operator reference](docs/operators/README.md)** — all 215 operators
 across 16 pages, each with its signature, its memory and termination
 behaviour, and a worked example that `go test` runs and verifies.
 
@@ -260,6 +260,7 @@ Guides, in reading order:
 6. [Concurrency](docs/06-concurrency.md) — the `parallel` package and its guarantee
 7. [Linting](docs/07-linting.md) — `catenalint` and what its fixes promise
 8. [Coming from lo, Kotlin or LINQ](docs/08-coming-from.md) — the name you know, and catena's
-9. [Releasing](docs/09-releasing.md) — how a release is cut and verified
+9. [Writing your own source](docs/09-writing-sources.md) — for what catena does not ship
+10. [Releasing](docs/10-releasing.md) — how a release is cut and verified
 
 Also: [runnable examples](examples/) · [API reference](https://pkg.go.dev/github.com/NerdMeNot/catena)

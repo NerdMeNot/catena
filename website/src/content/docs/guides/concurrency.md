@@ -50,11 +50,13 @@ these is probably it. Each links to a complete, runnable example.
 | Hash, resize, transcode or parse every file, on every core | [`Map`](/operators/concurrency/#cpu-work) |
 | Ask several replicas or mirrors and use the first to answer | [`MapUnordered` with `First`](/operators/concurrency/#mapunordered) |
 | Send webhooks, notifications or cache purges, and stop at the first failure | [`ForEach`](/operators/concurrency/#foreach) |
-| Load the three unrelated things a page needs, at once | [`ForEach` over functions](/operators/concurrency/#different-calls) |
+| Load the three unrelated things a page needs, at once | [`Do`](/operators/concurrency/#do) |
+| Call an API that fails now and then, or allows only so many requests a second | [`Retry` and `Limit`](/operators/concurrency/#retry) around the callback |
+| Fan out over input that can already fail — rows, records, parsed lines — without deciding yet what a failure means | [`MapTry`](/operators/concurrency/#maptry) |
 | Bulk-insert a live stream without holding rows back for a full batch | [`ChunkedWithin`](/operators/concurrency/#chunkedwithin) |
 | Keep reading while the consumer is busy — decode while uploading, parse while compressing | [`Buffer`](/operators/concurrency/#buffer) |
 | Combine several feeds — shards, services, partitions — into one stream | [`Merge`](/operators/concurrency/#merge) |
-| Walk a paginated API and fetch the details of each item concurrently | `source.Paginate`, `UntilErr`, then `Map` — [below](#errors-and-cancellation) |
+| Walk a paginated API and fetch the details of each item concurrently | `source.Paginate`, then `MapTry` — [below](#input-that-can-already-fail) |
 
 ## When it is worth it
 
@@ -74,7 +76,9 @@ A package cannot add methods to another package's type, so `parallel` cannot
 give `Seq` a `ParMap` method. Its operators are *stages* instead:
 `parallel.Map(ctx, 8, fetch)` returns a function from a sequence to its result,
 and `Seq.Then` applies a function to the sequence it is called on. The
-chain reads left to right, and the types are inferred.
+chain reads left to right, and the types are inferred. `Try.Then` does the
+same for a sequence that carries errors, which is how the `Try` stages
+below sit in a chain.
 
 `Then` is not special to `parallel`. Any function of one sequence fits, which
 includes every one-argument package function in the core:
@@ -154,7 +158,9 @@ when order does not matter — it is never slower, and under uneven latency
 it is much faster to first result.
 
 `ForEach` is the terminal: it runs the callback for its effect and
-returns the first error, having cancelled and joined the rest.
+returns the first error, having cancelled and joined the rest. All three
+have `Try` forms, for input that can already fail —
+[below](#input-that-can-already-fail).
 
 ```go
 err := catena.FromSlice(jobs).Then(parallel.ForEach(ctx, 16, run))
@@ -164,26 +170,24 @@ err := catena.FromSlice(jobs).Then(parallel.ForEach(ctx, 16, run))
 
 Not every concurrent job is the same function over many inputs. A page
 often needs three *different* things that have nothing to do with each
-other, and there is no reason to fetch them in turn. A sequence of
-functions does it:
+other, and there is no reason to fetch them in turn. `Do` runs them
+together:
 
 ```go
 var user User
 var orders []Order
 var recs []Product
 
-err := catena.Of(
+err := parallel.Do(ctx,
     func(ctx context.Context) (err error) { user, err = loadUser(ctx, id); return },
     func(ctx context.Context) (err error) { orders, err = loadOrders(ctx, id); return },
     func(ctx context.Context) (err error) { recs, err = loadRecs(ctx, id); return },
-).Then(parallel.ForEach(ctx, 3, func(ctx context.Context, load func(context.Context) error) error {
-    return load(ctx)
-}))
+)
 ```
 
-All three run together; the first to fail cancels the other two; and by
-the time `err` is assigned all three have returned, so reading `user`,
-`orders` and `recs` afterwards is safe.
+The first to fail cancels the other two, and by the time `Do` returns all
+three have, so reading `user`, `orders` and `recs` afterwards is safe.
+It is `errgroup`'s job, with the same guarantee as every stage here.
 
 ## Errors and cancellation
 
@@ -204,10 +208,30 @@ context's error once, and ends — the same shape as `UntilDone`.
 A panic in a callback or in the source is re-raised on your goroutine,
 with its original value, after everything has been joined.
 
-If the input is itself a `Try` — rows from a query, pages from an API —
-give it a policy before the stage, since the stages take a plain `Seq`.
-`UntilErr` is usually the one: it stops at the source's first error and
-holds it for you to check once the pipeline has run.
+### Input that can already fail
+
+Often the input to a stage can fail before any call is made: rows from a
+query, records from a file, items from a paginated API. Those arrive as
+a `Try`, and the `Try` forms of the stages take them as they are — an
+errored element is never passed to the callback and makes no call, and it
+arrives in its place among the results:
+
+```go
+users, problems := source.Paginate(first, listUsers). // Try[User]
+    Filter(isActive).
+    Then(parallel.MapTry(ctx, 8, enrich)).            // a failed page is never enriched
+    CollectAll()
+```
+
+`MapTry`, `MapUnorderedTry` and `ForEachTry` are otherwise exactly `Map`,
+`MapUnordered` and `ForEach`, so the pipeline goes concurrent without
+deciding yet what a failure means; the terminal still decides. In order,
+an error holds its place in the window like a result does; unordered, it
+is yielded as soon as it arrives.
+
+To decide first instead, give the input a policy before a plain stage.
+`UntilErr` stops at the source's first error and holds it for you to
+check once the pipeline has run:
 
 ```go
 var srcErr error
@@ -221,6 +245,33 @@ if err = errors.Join(srcErr, err); err != nil {
 
 Reading `srcErr` afterwards is safe even where the source ran on another
 goroutine: every stage has joined before `Collect` returns.
+
+## Retries and rate limits
+
+The callback is usually a call to someone else's service, and services
+fail now and then and allow only so many requests. `Retry` and `Limit`
+take a callback and return one of the same shape, with that built in, so
+they go wherever a callback does. Neither starts a goroutine.
+
+```go
+fetch := parallel.Retry(3, backoff, isTransient, // up to three tries, for errors worth retrying
+    parallel.Limit(50, time.Second, getProduct)) // and never more than 50 a second
+
+products, err := catena.FromSlice(ids).
+    Then(parallel.Map(ctx, 8, fetch)).
+    Collect()
+```
+
+- `Retry` waits `backoff(k)` after failed try `k`, and asks the predicate
+  whether an error is worth another try — a timeout or a 503 is, a 404 is
+  not; nil retries everything. A done context ends the waiting.
+- `Limit` lets at most `n` calls through in any period of length `per`,
+  however many workers are calling. It is shared by every use of the
+  function it returns, so make one per quota and pass it everywhere that
+  quota applies.
+- Order matters. With `Limit` inside `Retry`, as above, every try counts
+  against the limit — which is what the server counts. The other way
+  round, a call and all its retries would take one turn.
 
 ## Batching by time
 

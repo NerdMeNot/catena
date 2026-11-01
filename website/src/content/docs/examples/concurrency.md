@@ -1,11 +1,11 @@
 ---
 title: "Concurrency"
-description: "the `parallel` package: `Then`, concurrent `Map` with per-element errors, `ForEach`, batching by time"
+description: "the `parallel` package: `Then`, concurrent `Map` with per-element errors, `MapTry` over input that can fail, `Retry` and `Limit` for a flaky, rate-limited service, `Do`, batching by time"
 sidebar:
   order: 9
 ---
 
-Concurrency: a nightly job that turns a batch of orders into a shipping report, where every order needs two calls to other services. Sequentially that is slow in the dullest way — waiting. The parallel package runs the calls several at a time without the pipeline changing shape: a stage goes into the chain with Then, a failed call is an element so the consumer still picks the error policy, and every goroutine a stage starts has exited before the line that consumed it returns.  The services here are a real HTTP server on localhost with 40ms of latency per request, so the timings printed are real.
+Concurrency: a nightly job that turns a batch of orders into a shipping report, where every order needs two calls to other services. Sequentially that is slow in the dullest way — waiting. The parallel package runs the calls several at a time without the pipeline changing shape: a stage goes into the chain with Then, a failed call is an element so the consumer still picks the error policy, and every goroutine a stage starts has exited before the line that consumed it returns. Input that can already fail goes through MapTry; a service that fails now and then, or allows only so many requests, gets Retry and Limit around the call.  The services here are a real HTTP server on localhost with 40ms of latency per request, so the timings printed are real.
 
 Run it: `go run ./examples/09-concurrency`
 
@@ -16,7 +16,9 @@ Run it: `go run ./examples/09-concurrency`
 // calls several at a time without the pipeline changing shape: a stage goes
 // into the chain with Then, a failed call is an element so the consumer
 // still picks the error policy, and every goroutine a stage starts has
-// exited before the line that consumed it returns.
+// exited before the line that consumed it returns. Input that can already
+// fail goes through MapTry; a service that fails now and then, or allows
+// only so many requests, gets Retry and Limit around the call.
 //
 // The services here are a real HTTP server on localhost with 40ms of
 // latency per request, so the timings printed are real.
@@ -25,10 +27,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -114,21 +119,42 @@ func main() {
 		Collect()
 	fmt.Println("out of stock:", missing)
 
+	// Orders often arrive as text, and text can fail to parse. MapTry
+	// takes the parsed lines as a Try: a line that did not parse is never
+	// prepared — no request is made for it — and arrives in its place.
+	lines := catena.Of("1001,ada,kbd-01", "1002,bob", "1004,cy,mon-27")
+	ready, problems := lines.MapErr(parseOrder).
+		Then(parallel.MapTry(ctx, 4, prepare)).
+		CollectAll()
+	fmt.Printf("from text: %d prepared, problems: %v\n", len(ready), problems)
+
+	// The warehouse's stock service is flakier: it allows ten requests per
+	// 100ms, and turns the first request for any SKU away with a 503.
+	// Retry tries again for a 503 (and only a 503); Limit, inside it,
+	// keeps every try within the quota, however many workers are calling.
+	api.requests.Store(0)
+	unavailable := func(err error) bool { return errors.Is(err, errUnavailable) }
+	backoff := func(attempt int) time.Duration { return time.Duration(attempt) * 5 * time.Millisecond }
+	check := parallel.Retry(3, backoff, unavailable,
+		parallel.Limit(10, 100*time.Millisecond, api.warehouseStock))
+	skus := catena.Of("kbd-01", "mse-07", "mon-27", "cam-02", "hub-04", "cbl-09", "dock-3", "pen-11")
+	checked, err := skus.Then(parallel.Map(ctx, 8, check)).Collect()
+	fmt.Printf("warehouse: %d SKUs checked in %d requests, err: %v\n",
+		len(checked), api.requests.Load(), err)
+
 	// Not every concurrent job is "the same call for many inputs".
-	// Sometimes it is three different calls that a page needs at once. A
-	// sequence of functions does that: ForEach runs them together and
-	// returns the first error, having cancelled the others.
+	// Sometimes it is three different calls that a page needs at once. Do
+	// runs them together and returns the first error, having cancelled
+	// the others; once it returns, all three have.
 	var address string
 	var stocked bool
 	var recent int
 	start = time.Now()
-	err = catena.Of(
+	err = parallel.Do(ctx,
 		func(ctx context.Context) (err error) { address, err = api.address(ctx, "ada"); return },
 		func(ctx context.Context) (err error) { stocked, err = api.inStock(ctx, "kbd-01"); return },
 		func(ctx context.Context) (err error) { recent, err = api.recentOrders(ctx, "ada"); return },
-	).Then(parallel.ForEach(ctx, 3, func(ctx context.Context, load func(context.Context) error) error {
-		return load(ctx)
-	}))
+	)
 	fmt.Printf("dashboard for ada in about %v: %s, kbd-01 in stock: %v, %d recent orders (err: %v)\n",
 		time.Since(start).Round(40*time.Millisecond), address, stocked, recent, err)
 
@@ -152,11 +178,27 @@ func main() {
 	}
 }
 
+// parseOrder reads "id,customer,sku".
+func parseOrder(line string) (Order, error) {
+	f := strings.Split(line, ",")
+	if len(f) != 3 {
+		return Order{}, fmt.Errorf("order line %q: want id,customer,sku", line)
+	}
+	id, err := strconv.Atoi(f[0])
+	if err != nil {
+		return Order{}, fmt.Errorf("order line %q: %w", line, err)
+	}
+	return Order{id, f[1], f[2]}, nil
+}
+
 // ---- the services ----
+
+var errUnavailable = errors.New("503 Service Unavailable")
 
 type services struct {
 	*httptest.Server
 	requests atomic.Int64
+	seen     sync.Map // warehouse SKUs asked about at least once
 }
 
 // startServices runs the customer, inventory and order-history services
@@ -188,6 +230,12 @@ func startServices() *services {
 			json.NewEncoder(w).Encode(!outOfStock[name])
 		case "history":
 			json.NewEncoder(w).Encode(len(name) - 1)
+		case "warehouse":
+			if _, again := s.seen.LoadOrStore(name, true); !again {
+				http.Error(w, "busy", http.StatusServiceUnavailable)
+				return
+			}
+			json.NewEncoder(w).Encode(!outOfStock[name])
 		}
 	}))
 	return s
@@ -207,6 +255,9 @@ func call[T any](ctx context.Context, s *services, path string) (T, error) {
 		return out, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return out, fmt.Errorf("%s: %w", path, errUnavailable)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return out, fmt.Errorf("%s: %s", path, resp.Status)
 	}
@@ -223,6 +274,10 @@ func (s *services) inStock(ctx context.Context, sku string) (bool, error) {
 
 func (s *services) recentOrders(ctx context.Context, customer string) (int, error) {
 	return call[int](ctx, s, "/history/"+customer)
+}
+
+func (s *services) warehouseStock(ctx context.Context, sku string) (bool, error) {
+	return call[bool](ctx, s, "/warehouse/"+sku)
 }
 ```
 

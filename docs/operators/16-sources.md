@@ -1,6 +1,6 @@
 # Sources
 
-Ready-made producers for what pipelines most often start from, in the `catena/source` and `catena/source/sqlsource` packages. Each takes a function that opens its resource rather than an open resource, and calls it inside the iteration: a pipeline that is built but never consumed opens nothing, and any exit — the end, an early stop, a panic — releases it. All of them return a `Try`, so a failure is an element the consumer decides about.
+Ready-made producers for what pipelines most often start from — lines, CSV, JSON Lines, pages and rows — in the `catena/source` and `catena/source/sqlsource` packages. Each takes a function that opens its resource rather than an open resource, and calls it inside the iteration: a pipeline that is built but never consumed opens nothing, and any exit — the end, an early stop, a panic — releases it. All of them return a `Try`. A failure of the source ends it; a failure of one record — a malformed row, a line that does not decode — is an element in its place, and the records after it still come. For anything not here, [writing your own source](../09-writing-sources.md) is the same shape.
 
 ## Lines
 

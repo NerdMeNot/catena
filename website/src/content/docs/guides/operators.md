@@ -9,6 +9,27 @@ Every operator, grouped the way the source is. Full signatures are on
 [pkg.go.dev](https://pkg.go.dev/github.com/NerdMeNot/catena); this page is
 for finding the right operator and knowing its costs at a glance.
 
+## I want to…
+
+The operators people reach for most, by the job rather than the name.
+
+| I want to | Use |
+|---|---|
+| Keep some elements, change each one | [`Filter`](/operators/filtering/#filter), [`Map`](/operators/transforming/#map) |
+| Drop duplicates | [`Distinct`](/operators/filtering/#distinct), [`DistinctBy`](/operators/filtering/#distinctby) |
+| Get the top or bottom N without sorting everything | [`TopN`](/operators/aggregating/#topn), [`TopNBy`](/operators/aggregating/#topnby) |
+| Count, sum or group by a key | [`TallyBy`](/operators/folding/#tallyby), [`GroupBy`](/operators/folding/#groupby), [`FoldedBy`](/operators/folding/#foldedby) |
+| Split into two by a condition | [`Partition`](/operators/folding/#partition) |
+| Process in batches of N | [`Chunked`](/operators/batching/#chunked) |
+| Batch a live stream by size or time | [`parallel.ChunkedWithin`](/operators/concurrency/#chunkedwithin) |
+| Match two lists by a key | [`JoinBy`](/operators/combining/#joinby), [`LeftJoinBy`](/operators/combining/#leftjoinby) |
+| Read a file line by line, a CSV, or JSON Lines | [`source.Lines`](/operators/sources/#lines), [`source.CSV`](/operators/sources/#csv), [`source.JSONLines`](/operators/sources/#jsonlines) |
+| Read the rows of a query, the pages of an API | [`sqlsource.Rows`](/operators/sources/#rows), [`source.Paginate`](/operators/sources/#paginate) |
+| Keep going past bad records, or stop at the first | [`CollectAll`](/operators/errors/#collectall), [`Collect`](/operators/errors/#collect) |
+| Call a function for many items, several at once | [`parallel.Map`](/operators/concurrency/#map), [`parallel.MapTry`](/operators/concurrency/#maptry) |
+| Retry a flaky call, or keep to a rate limit | [`parallel.Retry`](/operators/concurrency/#retry), [`parallel.Limit`](/operators/concurrency/#limit) |
+| Run a few different calls at once | [`parallel.Do`](/operators/concurrency/#do) |
+
 Markers: **⚠ mem** buffers beyond O(1), with its bound · **⚠∞** fully
 drains — hangs on infinite input · **◐** conditional drain — terminates only
 when the answer arrives · **[S]** builds per-iteration state, created fresh
@@ -160,7 +181,8 @@ emitted slice is fresh; retaining one is always safe.
 
 ## Concurrency (`catena/parallel`)
 
-The operators that start goroutines, as stages for `Seq.Then`. Every one
+The operators that start goroutines, as stages for `Seq.Then` and
+`Try.Then`, and the callback wrappers `Retry` and `Limit`. Every one
 joins its goroutines before its iteration returns. See
 [06-concurrency.md](/guides/concurrency/).
 
@@ -169,6 +191,10 @@ joins its goroutines before its iteration returns. See
 | `parallel.Map(ctx, n, f)` | → `Try`; `n` calls at once, results in source order; ⚠ mem `n` results; source stays on the consumer's goroutine |
 | `parallel.MapUnordered(ctx, n, f)` | → `Try`; results as calls finish; ⚠ mem `n` |
 | `parallel.ForEach(ctx, n, f)` | terminal; first error, the rest cancelled and joined; ⚠∞ on success |
+| `parallel.MapTry`, `MapUnorderedTry`, `ForEachTry` | the same, from a `Try`: an errored element makes no call and passes through in place (via `Try.Then`) |
+| `parallel.Do(ctx, fns...)` | runs different functions at once; first error, the rest cancelled and joined |
+| `parallel.Retry(attempts, backoff, retryable, f)` | wraps a callback: tries again with backoff, for the errors you say; no goroutines |
+| `parallel.Limit(n, per, f)` | wraps a callback: at most `n` calls let through per `per`, shared by every use; no goroutines |
 | `parallel.Buffer[T](n)` | read-ahead on a goroutine of its own; ⚠ mem `n`; upstream runs concurrently with the consumer |
 | `parallel.ChunkedWithin[T](n, d)` | → `Seq[[]T]`; a chunk at `n` elements or `d` after its first; never empty; ⚠ mem `n` |
 | `parallel.Merge(seqs...)` | interleaves by arrival, one goroutine per input; order within an input is kept |
@@ -181,6 +207,8 @@ every exit. All return a `Try`.
 | Operator | Notes |
 |---|---|
 | `source.Lines(open)` | lines of a reader, any length, endings stripped; ⚠ mem one line |
+| `source.CSV(open, setup)` | records of CSV data; a malformed record is an element and reading continues; ⚠ mem one record |
+| `source.JSONLines[T](open)` | one JSON value per line; a line that does not decode is an element and reading continues; ⚠ mem one line |
 | `source.Paginate(first, fetch)` | a page is fetched only once the one before it is yielded in full; ⚠ mem one page |
 | `sqlsource.Rows(open, scan)` | rows of a query; a failed scan is an element and iteration continues |
 
@@ -194,7 +222,8 @@ slices: `catena.Unzip`.
 `Try` mirrors the intermediates under the five error rules
 ([03-error-handling.md](/guides/error-handling/)) and adds the policy terminals:
 `Collect`, `CollectAll`, `Ignore`, `Errs`, `UntilErr`, `Must`, `Err`, plus `Recover`,
-`WrapErr`, `OnError`, `UntilDone`.
+`WrapErr`, `OnError`, `UntilDone`, and `Then` for functions of a whole
+`Try`, such as the `parallel` Try stages.
 
 `List` mirrors the whole `Seq` operation set eagerly (generated, and
 conformance-checked to agree with `AsSeq()`), plus `Len`, `At`, `Get`,

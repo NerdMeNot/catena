@@ -2,7 +2,7 @@
 title: "Releasing"
 description: "Go modules resolve from git tags, so the tag is the release — the workflow's job is to refuse to publish one that shouldn't exist, then create the GitHub release for the one that should."
 sidebar:
-  order: 9
+  order: 10
 ---
 
 Go modules resolve from git tags, so the tag *is* the release — the

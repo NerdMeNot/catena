@@ -6,9 +6,58 @@ All notable changes to catena are documented here. The format follows
 
 ## [Unreleased]
 
-Documentation only — no change to the library's API or behaviour.
+The friction a first pipeline hits, removed: input that can already fail
+now goes through `parallel` without being settled first, calls to other
+services get retries and rate limits, and two more formats are read.
+Nothing existing changes behaviour.
+
+### Added
+
+- **Stages that take a `Try`.** `parallel.MapTry`, `MapUnorderedTry` and
+  `ForEachTry` are `Map`, `MapUnordered` and `ForEach` for a sequence
+  that carries errors. An errored element is never passed to the
+  callback and makes no call: in order it keeps its place among the
+  results, out of order it is yielded as it arrives, and `ForEachTry`
+  returns it as the first error. Until now such input needed `UntilErr`
+  or `Ignore` before any stage, deciding what its errors meant before the
+  pipeline had run.
+- **`Try.Then`**, the twin of `Seq.Then`, so those stages sit in a chain:
+  `rows.Filter(isBig).Then(parallel.MapTry(ctx, 8, enrich)).CollectAll()`.
+- **`parallel.Retry` and `parallel.Limit`** wrap a callback and return one
+  of the same shape, so they go anywhere a callback does; neither starts
+  a goroutine. `Retry` tries again with a backoff, for the errors a
+  predicate accepts. `Limit` lets at most `n` calls through in any period
+  of length `per`, shared by every use of the function it returns — one
+  quota per API. With `Limit` inside `Retry`, every try counts against
+  the limit.
+- **`parallel.Do`** runs a few different functions at once and returns the
+  first error, having cancelled and joined the rest — what `ForEach` over
+  a sequence of functions did, under the name people look for.
+- **`source.CSV` and `source.JSONLines`.** CSV records through
+  `encoding/csv`, and one JSON value per line. A record that cannot be
+  parsed or decoded is an error element in its place and reading
+  continues; a read failure ends the sequence. The `source` package doc
+  now says which failures end a sequence and which are elements.
+
+### Changed
+
+- `parallel.Map`, `MapUnordered` and `ForEach` share their body with the
+  `Try` forms. Time per run is unchanged within measurement noise; the
+  adapter costs one or two allocations per run, not per element.
 
 ### Documentation
+
+- **Writing your own source**, a new guide: the shape, the rules the
+  shipped sources follow (open lazily, release on any exit, tell a
+  source's failure from a record's), a source over `fs.WalkDir` worked
+  through, and how to test the lifecycle. The releasing guide moves to
+  `10-releasing.md`; site URLs are unchanged.
+- The operator catalogue opens with an "I want to…" table, by job rather
+  than by name.
+- The concurrency guide covers input that can already fail, retries and
+  rate limits, and `Do`; the concurrency and sources examples use them.
+- Two test loops over `bufio.Scanner` now check `Err`, which Go 1.28's
+  `scannererr` vet check is set to flag.
 
 - **The examples are real work now.** Every operator's example — the code
   the reference pages and pkg.go.dev show — is rewritten around a
@@ -35,8 +84,7 @@ Documentation only — no change to the library's API or behaviour.
   being run concurrently is written out in the example rather than named
   and left to the imagination, and operators can now carry several
   examples: `Map` shows API calls, a link checker that keeps going past
-  failures, and CPU work; `ForEach` shows running three different calls
-  at once. Where an example in another package calls a shared helper, the
+  failures, and CPU work. Where an example in another package calls a shared helper, the
   reference shows the helper's source beneath it.
 - The reference shows an operator's cautions as one list instead of a
   stack of separate boxes, and the concurrency guide opens with a table

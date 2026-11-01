@@ -984,3 +984,59 @@ listening on 8080
 skipping: strconv.Atoi: parsing "https": invalid syntax
 listening on 9090
 ```
+
+## Then
+
+```go
+func (t Try[T]) Then[U any](f func(Try[T]) U) U
+```
+
+Then returns f(t): Seq.Then for a sequence that carries errors. It lets a function taking a Try sit inside a chain — chiefly the parallel package's Try stages, so a pipeline can go concurrent without first deciding what its errors mean:  t.Filter(isBig).Then(parallel.MapTry(ctx, 8, enrich)).CollectAll()  A function needing more arguments goes in a closure.
+
+```go
+// Then keeps a Try in the chain through a function that takes one —
+// here a concurrent stage, so the orders are confirmed four at a time
+// without first deciding what the import's errors mean. The bad row
+// is never sent to the payment service; it arrives in its place.
+confirm := func(ctx context.Context, o importedOrder) (string, error) {
+	return fmt.Sprintf("%s confirmed", o.ID), nil
+}
+confirmed, failed := importedOrders().
+	Then(parallel.MapTry(context.Background(), 4, confirm)).
+	CollectAll()
+fmt.Println(confirmed)
+fmt.Println(failed)
+```
+
+```
+[A-100 confirmed A-102 confirmed A-103 confirmed]
+[order A-101: bad amount "pending"]
+```
+
+<details>
+<summary>The helpers this example calls</summary>
+
+```go
+// importedOrder is one row of the order export the Try examples share.
+type importedOrder struct {
+	ID    string
+	Cents int
+}
+
+// importedOrders parses a four-row CSV export whose second row has a bad
+// amount: three orders that parse and one that fails, so every operator's
+// treatment of an error is visible.
+func importedOrders() catena.Try[importedOrder] {
+	rows := catena.Of("A-100,2500", "A-101,pending", "A-102,1200", "A-103,800")
+	return rows.MapErr(func(row string) (importedOrder, error) {
+		id, amount, _ := strings.Cut(row, ",")
+		cents, err := strconv.Atoi(amount)
+		if err != nil {
+			return importedOrder{}, fmt.Errorf("order %s: bad amount %q", id, amount)
+		}
+		return importedOrder{ID: id, Cents: cents}, nil
+	})
+}
+```
+
+</details>

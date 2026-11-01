@@ -128,9 +128,11 @@ func Rows[T any](open func() (*sql.Rows, error), scan func(*sql.Rows) (T, error)
 ```
 
 That function ships as `sqlsource.Rows`, next to `source.Lines` for the
-lines of a reader and `source.Paginate` for a paginated API — see the
+lines of a reader, `source.CSV` and `source.JSONLines` for records, and
+`source.Paginate` for a paginated API — see the
 [sources reference](/operators/sources/). It is written out here
-because the same shape wraps anything else you own.
+because the same shape wraps anything else you own;
+[writing your own source](/guides/writing-sources/) takes it further.
 
 Two properties carry the whole design, and both are tested against a real
 `database/sql` driver:

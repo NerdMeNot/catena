@@ -1,25 +1,25 @@
 ---
 title: "Sources"
-description: "shipped producers: `Lines` over a file, `Paginate` over an API, feeding a concurrent stage"
+description: "shipped producers: `Lines` over a file, `CSV` and `JSONLines` past bad records, `Paginate` over an API, feeding a concurrent stage"
 sidebar:
   order: 10
 ---
 
-Sources: the producers in catena/source open what they read inside the iteration, so a pipeline that is built holds nothing, and a pipeline that stops early releases what it opened. Lines reads a file; Paginate walks a paginated API and fetches no page it does not need; and both feed a concurrent stage like any other sequence.
+Sources: the producers in catena/source open what they read inside the iteration, so a pipeline that is built holds nothing, and a pipeline that stops early releases what it opened. Lines reads a file; CSV and JSONLines read records, where one bad record is an element rather than the end; Paginate walks a paginated API and fetches no page it does not need; and all of them feed a concurrent stage like any other sequence.
 
 Run it: `go run ./examples/10-sources`
 
 ```go
 // Sources: the producers in catena/source open what they read inside the
 // iteration, so a pipeline that is built holds nothing, and a pipeline
-// that stops early releases what it opened. Lines reads a file; Paginate
-// walks a paginated API and fetches no page it does not need; and both
-// feed a concurrent stage like any other sequence.
+// that stops early releases what it opened. Lines reads a file; CSV and
+// JSONLines read records, where one bad record is an element rather than
+// the end; Paginate walks a paginated API and fetches no page it does not
+// need; and all of them feed a concurrent stage like any other sequence.
 package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -87,19 +87,42 @@ func main() {
 	all, _ := users.Collect()
 	fmt.Printf("all %d users, in %d requests\n", len(all), directory.requests)
 
-	// A source is a Try, and a stage takes a plain sequence, so the
-	// source needs an error policy first. UntilErr stops at the source's
-	// first error and holds it: nothing is dropped, nothing panics, and
-	// the error is there to check once the pipeline has run.
+	// A source is a Try, and MapTry takes one as it is: a page that
+	// failed would arrive in its place, without a call made for it, and
+	// the terminal still decides what a failure means.
 	greet := func(_ context.Context, u User) (string, error) {
 		return "hello, " + u.Name, nil
 	}
-	var listErr error
 	greetings, err := users.
-		UntilErr(&listErr).
-		Then(parallel.Map(context.Background(), 3, greet)).
+		Then(parallel.MapTry(context.Background(), 3, greet)).
 		Collect()
-	fmt.Println(greetings, errors.Join(listErr, err))
+	fmt.Println(greetings, err)
+
+	// CSV yields records. A row someone broke by hand is an element of
+	// its own — a *csv.ParseError naming the line — and the rows after it
+	// still come, so CollectAll keeps every good one.
+	csvPath := writeTemp("*.csv", "sku,qty\nkbd-01,3\nmse-07,2\"\nmon-27,1\n")
+	defer os.Remove(csvPath)
+	stock, bad := source.CSV(func() (io.ReadCloser, error) { return os.Open(csvPath) }, nil).
+		Drop(1). // the header
+		CollectAll()
+	fmt.Println("stock rows:", stock)
+	fmt.Println("bad rows:  ", bad)
+
+	// JSONLines decodes one value per line, the same way: a line cut
+	// off mid-write is an error naming its line, not the end of the file.
+	type Event struct {
+		User string `json:"user"`
+		Page string `json:"page"`
+	}
+	logPath := writeTemp("*.jsonl", `{"user":"ada","page":"/pricing"}
+{"user":"bob","pa
+{"user":"cy","page":"/docs"}
+`)
+	defer os.Remove(logPath)
+	events, broken := source.JSONLines[Event](func() (io.ReadCloser, error) { return os.Open(logPath) }).
+		CollectAll()
+	fmt.Println("events:", events, "broken:", broken)
 
 	// catena/source/sqlsource has the same producer for database/sql:
 	//
@@ -110,6 +133,17 @@ func main() {
 	//
 	// The query runs when the sequence is consumed, and the rows are
 	// closed on every exit.
+}
+
+// writeTemp writes body to a new temporary file and returns its path.
+func writeTemp(pattern, body string) string {
+	f, err := os.CreateTemp("", "catena-example-"+pattern)
+	if err != nil {
+		panic(err)
+	}
+	f.WriteString(body)
+	f.Close()
+	return f.Name()
 }
 
 func writeTempLog() string {
