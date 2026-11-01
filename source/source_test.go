@@ -1,6 +1,8 @@
 package source_test
 
 import (
+	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"io"
 	"slices"
@@ -62,73 +64,188 @@ func TestLinesSplitting(t *testing.T) {
 	}
 }
 
-func TestLinesLifecycle(t *testing.T) {
-	t.Run("never consumed, never opened", func(t *testing.T) {
-		tr := text("a\nb\n")
-		_ = source.Lines(tr.open).Ignore().Take(1)
-		if tr.opens != 0 {
-			t.Fatalf("opened %d times by building a pipeline", tr.opens)
-		}
-	})
+// lineSources are the producers that read a stream line by line or
+// record by record, each flattened to Try[string]. Every one gets the same
+// lifecycle checks; the fixture text is valid input for all three.
+var lineSources = []struct {
+	name string
+	of   func(open func() (io.ReadCloser, error)) catena.Try[string]
+}{
+	{"Lines", source.Lines},
+	{"CSV", func(open func() (io.ReadCloser, error)) catena.Try[string] {
+		return source.CSV(open, nil).Map(func(rec []string) string { return strings.Join(rec, ",") })
+	}},
+	{"JSONLines", source.JSONLines[string]},
+}
 
-	t.Run("early termination closes", func(t *testing.T) {
-		tr := text("a\nb\nc\n")
-		if got := source.Lines(tr.open).Ignore().Take(2).Collect(); !slices.Equal(got, []string{"a", "b"}) {
-			t.Fatalf("got %v", got)
-		}
-		if tr.opens != 1 || tr.closes != 1 {
-			t.Fatalf("opens=%d closes=%d", tr.opens, tr.closes)
-		}
-	})
-
-	t.Run("a panic downstream closes", func(t *testing.T) {
-		tr := text("a\nb\n")
-		func() {
-			defer func() { _ = recover() }()
-			source.Lines(tr.open).ForEach(func(string) error { panic("downstream") })
-		}()
-		if tr.closes != 1 {
-			t.Fatalf("closes=%d", tr.closes)
-		}
-	})
-
-	t.Run("each iteration opens afresh", func(t *testing.T) {
-		tr := text("a\nb\n")
-		lines := source.Lines(tr.open)
-		first, _ := lines.Collect()
-		second, _ := lines.Collect()
-		if !slices.Equal(first, second) || tr.opens != 2 || tr.closes != 2 {
-			t.Fatalf("%v then %v, opens=%d closes=%d", first, second, tr.opens, tr.closes)
-		}
-	})
-
-	t.Run("open failure is the only element", func(t *testing.T) {
-		vals, errs := source.Lines(func() (io.ReadCloser, error) { return nil, errBoom }).CollectAll()
-		if vals != nil || len(errs) != 1 || !errors.Is(errs[0], errBoom) {
-			t.Fatalf("vals=%v errs=%v", vals, errs)
-		}
-	})
-
-	t.Run("read failure ends the sequence and drops the partial line", func(t *testing.T) {
-		tr := &tracker{body: func() io.Reader {
-			return io.MultiReader(strings.NewReader("a\nparti"), iotest.ErrReader(errBoom))
-		}}
-		var got []string
-		var errs []error
-		for line, err := range source.Lines(tr.open) {
-			if err != nil {
-				errs = append(errs, err)
-				if line != "" {
-					t.Fatalf("value %q alongside an error", line)
+func TestLineSourcesLifecycle(t *testing.T) {
+	const three = "\"a\"\n\"b\"\n\"c\"\n"
+	for _, src := range lineSources {
+		t.Run(src.name, func(t *testing.T) {
+			t.Run("never consumed, never opened", func(t *testing.T) {
+				tr := text(three)
+				_ = src.of(tr.open).Ignore().Take(1)
+				if tr.opens != 0 {
+					t.Fatalf("opened %d times by building a pipeline", tr.opens)
 				}
+			})
+
+			t.Run("early termination closes", func(t *testing.T) {
+				tr := text(three)
+				if got := src.of(tr.open).Ignore().Take(2).Collect(); len(got) != 2 {
+					t.Fatalf("got %v", got)
+				}
+				if tr.opens != 1 || tr.closes != 1 {
+					t.Fatalf("opens=%d closes=%d", tr.opens, tr.closes)
+				}
+			})
+
+			t.Run("a panic downstream closes", func(t *testing.T) {
+				tr := text(three)
+				func() {
+					defer func() { _ = recover() }()
+					src.of(tr.open).ForEach(func(string) error { panic("downstream") })
+				}()
+				if tr.closes != 1 {
+					t.Fatalf("closes=%d", tr.closes)
+				}
+			})
+
+			t.Run("each iteration opens afresh", func(t *testing.T) {
+				tr := text(three)
+				seq := src.of(tr.open)
+				first, _ := seq.Collect()
+				second, _ := seq.Collect()
+				if len(first) != 3 || !slices.Equal(first, second) || tr.opens != 2 || tr.closes != 2 {
+					t.Fatalf("%v then %v, opens=%d closes=%d", first, second, tr.opens, tr.closes)
+				}
+			})
+
+			t.Run("open failure is the only element", func(t *testing.T) {
+				vals, errs := src.of(func() (io.ReadCloser, error) { return nil, errBoom }).CollectAll()
+				if vals != nil || len(errs) != 1 || !errors.Is(errs[0], errBoom) {
+					t.Fatalf("vals=%v errs=%v", vals, errs)
+				}
+			})
+
+			t.Run("read failure ends the sequence and drops the partial line", func(t *testing.T) {
+				tr := &tracker{body: func() io.Reader {
+					return io.MultiReader(strings.NewReader("\"a\"\n\"parti"), iotest.ErrReader(errBoom))
+				}}
+				var got []string
+				var errs []error
+				for v, err := range src.of(tr.open) {
+					if err != nil {
+						errs = append(errs, err)
+						if v != "" {
+							t.Fatalf("value %q alongside an error", v)
+						}
+						continue
+					}
+					got = append(got, v)
+				}
+				if len(got) != 1 || len(errs) != 1 || !errors.Is(errs[0], errBoom) || tr.closes != 1 {
+					t.Fatalf("got=%v errs=%v closes=%d", got, errs, tr.closes)
+				}
+			})
+		})
+	}
+}
+
+func TestCSV(t *testing.T) {
+	read := func(in string, setup func(*csv.Reader)) ([][]string, []error) {
+		var recs [][]string
+		var errs []error
+		for rec, err := range source.CSV(text(in).open, setup) {
+			if err != nil {
+				if rec != nil {
+					t.Fatalf("%q: record %q alongside an error", in, rec)
+				}
+				errs = append(errs, err)
 				continue
 			}
-			got = append(got, line)
+			recs = append(recs, rec)
 		}
-		if !slices.Equal(got, []string{"a"}) || len(errs) != 1 || !errors.Is(errs[0], errBoom) || tr.closes != 1 {
-			t.Fatalf("got=%v errs=%v closes=%d", got, errs, tr.closes)
+		return recs, errs
+	}
+	parseErr := func(err error) bool {
+		var pe *csv.ParseError
+		return errors.As(err, &pe)
+	}
+
+	t.Run("records, quoting and line endings", func(t *testing.T) {
+		recs, errs := read("id,note\r\n1,\"two\nlines\"\r\n2,\"say \"\"hi\"\"\"\n", nil)
+		want := [][]string{{"id", "note"}, {"1", "two\nlines"}, {"2", `say "hi"`}}
+		if errs != nil || !slices.EqualFunc(recs, want, slices.Equal) {
+			t.Fatalf("got %q %v", recs, errs)
 		}
 	})
+
+	t.Run("a bad record is an element, and reading goes on", func(t *testing.T) {
+		recs, errs := read("a,b\nx\"y,z\nc,d\n", nil)
+		if len(recs) != 2 || len(errs) != 1 || !parseErr(errs[0]) {
+			t.Fatalf("got %q %v", recs, errs)
+		}
+	})
+
+	t.Run("the wrong number of fields is a bad record", func(t *testing.T) {
+		recs, errs := read("a,b\nx,y,z\nc,d\n", nil) // the first record sets the count
+		if len(recs) != 2 || len(errs) != 1 || !errors.Is(errs[0], csv.ErrFieldCount) {
+			t.Fatalf("got %q %v", recs, errs)
+		}
+	})
+
+	t.Run("an unclosed quote takes the rest, as one error", func(t *testing.T) {
+		recs, errs := read("a,b\nc,\"d\ne,f\n", nil)
+		if len(recs) != 1 || len(errs) != 1 || !parseErr(errs[0]) {
+			t.Fatalf("got %q %v", recs, errs)
+		}
+	})
+
+	t.Run("setup configures the reader", func(t *testing.T) {
+		recs, errs := read("# exported\na;b\nc;d\n", func(r *csv.Reader) {
+			r.Comma = ';'
+			r.Comment = '#'
+		})
+		if errs != nil || !slices.EqualFunc(recs, [][]string{{"a", "b"}, {"c", "d"}}, slices.Equal) {
+			t.Fatalf("got %q %v", recs, errs)
+		}
+	})
+
+	t.Run("records are never reused", func(t *testing.T) {
+		recs, _ := read("a,b\nc,d\n", func(r *csv.Reader) { r.ReuseRecord = true })
+		if recs[0][0] != "a" || recs[1][0] != "c" {
+			t.Fatalf("an earlier record changed under a later one: %q", recs)
+		}
+	})
+
+	t.Run("a reader that cannot work ends the sequence", func(t *testing.T) {
+		// Not a record's fault but the configuration's: no way on.
+		recs, errs := read("a,b\nc,d\n", func(r *csv.Reader) { r.Comma = '"' })
+		if recs != nil || len(errs) != 1 || parseErr(errs[0]) {
+			t.Fatalf("got %q %v", recs, errs)
+		}
+	})
+}
+
+func TestJSONLines(t *testing.T) {
+	type event struct {
+		Kind string `json:"kind"`
+		N    int    `json:"n"`
+	}
+	in := "{\"kind\":\"click\",\"n\":1}\r\n\n  \n{\"kind\":\"view\",\"n\":2}\nnot json\n{\"kind\":\"click\",\"n\":\"three\"}\n{\"kind\":\"buy\",\"n\":4}"
+	events, errs := source.JSONLines[event](text(in).open).CollectAll()
+	want := []event{{"click", 1}, {"view", 2}, {"buy", 4}}
+	if !slices.Equal(events, want) || len(errs) != 2 {
+		t.Fatalf("got %v %v", events, errs)
+	}
+	// Errors name the line, counting the blank ones, and keep json's error.
+	var syntax *json.SyntaxError
+	var typ *json.UnmarshalTypeError
+	if !strings.HasPrefix(errs[0].Error(), "line 5: ") || !errors.As(errs[0], &syntax) ||
+		!strings.HasPrefix(errs[1].Error(), "line 6: ") || !errors.As(errs[1], &typ) {
+		t.Fatalf("errors: %v", errs)
+	}
 }
 
 // pages is a paginated source of the integers below total, size at a time,

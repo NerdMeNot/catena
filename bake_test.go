@@ -248,6 +248,10 @@ func TestBakeLogPipeline(t *testing.T) {
 					return
 				}
 			}
+			if err := sc.Err(); err != nil {
+				var zero logEntry
+				yield(zero, err)
+			}
 		}
 	}
 

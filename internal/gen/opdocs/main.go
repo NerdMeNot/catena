@@ -318,7 +318,10 @@ var families = []family{
 			"iteration: a pipeline that is built but never consumed opens nothing, and any " +
 			"exit — the end, an early stop, a panic — releases it. All of them return a " +
 			"`Try`, so a failure is an element the consumer decides about.",
-		Members: []string{"source.Lines", "source.Paginate", "sqlsource.Rows"},
+		Members: []string{
+			"source.Lines", "source.CSV", "source.JSONLines",
+			"source.Paginate", "sqlsource.Rows",
+		},
 	},
 }
 

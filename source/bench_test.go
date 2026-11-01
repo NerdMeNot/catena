@@ -24,6 +24,9 @@ func BenchmarkLines_Scanner(b *testing.B) {
 		for sc.Scan() {
 			n += len(sc.Text())
 		}
+		if err := sc.Err(); err != nil {
+			b.Fatal(err)
+		}
 		benchSink = n
 	}
 }
