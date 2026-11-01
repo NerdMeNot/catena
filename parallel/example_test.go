@@ -16,6 +16,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -23,6 +24,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing/fstest"
 	"time"
@@ -194,43 +196,6 @@ func ExampleForEach() {
 	// Output: purged on 6 nodes, err: <nil>
 }
 
-func ExampleForEach_differentCalls() {
-	// Not the same call for many inputs, but three different calls a
-	// dashboard needs, with nothing to do with each other. Put the
-	// functions themselves in the sequence.
-	getJSON := func(ctx context.Context, path string, into any) error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, shopURL+path, nil)
-		if err != nil {
-			return err
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		return json.NewDecoder(resp.Body).Decode(into)
-	}
-
-	var (
-		name     string
-		orders   []int
-		featured struct{ Name string }
-	)
-	loads := catena.Of(
-		func(ctx context.Context) error { return getJSON(ctx, "/users/7/name", &name) },
-		func(ctx context.Context) error { return getJSON(ctx, "/users/7/orders", &orders) },
-		func(ctx context.Context) error { return getJSON(ctx, "/products/103", &featured) },
-	)
-
-	// All three run together. The first to fail cancels the others, and
-	// all three have returned by the time err is set — so reading what
-	// they wrote is safe.
-	err := loads.Then(parallel.ForEach(context.Background(), 3,
-		func(ctx context.Context, load func(context.Context) error) error { return load(ctx) }))
-	fmt.Println(name, orders, featured.Name, err)
-	// Output: ada [1001 1004] monitor <nil>
-}
-
 func ExampleMapTry() {
 	// The product ids come from a file someone typed, so parsing them can
 	// fail — and that should not stop the lookups for the ids that did
@@ -327,6 +292,100 @@ func ExampleForEachTry() {
 	// Output: bad node name "sin 1"
 }
 
+func ExampleRetry() {
+	// The stock service is having a bad day: every item's first two
+	// requests get a 503. A 503 is worth trying again; a 404 would not
+	// be, so the predicate says which errors to retry.
+	errUnavailable := errors.New("503 Service Unavailable")
+	inStock := func(ctx context.Context, sku string) (string, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, shopURL+"/flaky/"+sku, nil)
+		if err != nil {
+			return "", err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return "", err
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusServiceUnavailable {
+			return "", fmt.Errorf("%s: %w", sku, errUnavailable)
+		}
+		return sku + " in stock", nil
+	}
+	transient := func(err error) bool { return errors.Is(err, errUnavailable) }
+	backoff := func(attempt int) time.Duration { return time.Duration(attempt) * time.Millisecond }
+
+	// Up to three tries each, four items at a time.
+	checked, err := catena.Of("kbd-01", "mse-07", "mon-27").
+		Then(parallel.Map(context.Background(), 4, parallel.Retry(3, backoff, transient, inStock))).
+		Collect()
+	fmt.Println(checked, err)
+	// Output: [kbd-01 in stock mse-07 in stock mon-27 in stock] <nil>
+}
+
+func ExampleLimit() {
+	// The API allows five requests per 50ms. Eight workers would blow
+	// through that at once, so the call is limited, and the limit holds
+	// across all of them.
+	getProduct := func(ctx context.Context, id int) (int, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/products/%d", shopURL, id), nil)
+		if err != nil {
+			return 0, err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		resp.Body.Close()
+		return id, nil
+	}
+
+	limited := parallel.Limit(5, 50*time.Millisecond, getProduct)
+	ids := catena.Of(101, 102, 103, 104, 101, 102, 103, 104, 101, 102, 103, 104)
+	start := time.Now()
+	got, err := ids.Then(parallel.Map(context.Background(), 8, limited)).Collect()
+
+	// Twelve requests at five per 50ms: five at once, five 50ms later,
+	// the last two 50ms after that.
+	fmt.Println(len(got), "products, err:", err)
+	fmt.Println("took at least 100ms:", time.Since(start) >= 100*time.Millisecond)
+	// Output:
+	// 12 products, err: <nil>
+	// took at least 100ms: true
+}
+
+func ExampleDo() {
+	// A dashboard needs three unrelated things at once. Each function
+	// writes its own variable; Do returns once all three have returned, so
+	// reading them afterwards is safe. The first failure cancels the
+	// others.
+	getJSON := func(ctx context.Context, path string, into any) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, shopURL+path, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		return json.NewDecoder(resp.Body).Decode(into)
+	}
+
+	var (
+		name     string
+		orders   []int
+		featured struct{ Name string }
+	)
+	err := parallel.Do(context.Background(),
+		func(ctx context.Context) error { return getJSON(ctx, "/users/7/name", &name) },
+		func(ctx context.Context) error { return getJSON(ctx, "/users/7/orders", &orders) },
+		func(ctx context.Context) error { return getJSON(ctx, "/products/103", &featured) },
+	)
+	fmt.Println(name, orders, featured.Name, err)
+	// Output: ada [1001 1004] monitor <nil>
+}
+
 func ExampleBuffer() {
 	// Archiving a log: reading and splitting it into lines is work, and
 	// so is compressing them. In one loop they take turns. Behind a
@@ -393,6 +452,9 @@ func ExampleMerge() {
 
 // ---- the server the examples talk to ----
 
+// flakyTries counts the requests to each /flaky/ path.
+var flakyTries sync.Map
+
 // shopURL is the base URL of a small HTTP API started for these tests. It
 // has a little latency on every route, so that running requests
 // concurrently is visibly different from not.
@@ -423,6 +485,13 @@ var shopURL = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r 
 			return
 		}
 		w.Write(make([]byte, 2048))
+	case strings.HasPrefix(path, "/flaky/"):
+		// Every item's first two requests fail.
+		n, _ := flakyTries.LoadOrStore(path, new(atomic.Int64))
+		if n.(*atomic.Int64).Add(1) <= 2 {
+			http.Error(w, "try again", http.StatusServiceUnavailable)
+			return
+		}
 	case strings.HasPrefix(path, "/purge/"):
 		time.Sleep(2 * time.Millisecond)
 	case path == "/users/7/name":

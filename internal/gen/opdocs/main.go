@@ -304,6 +304,7 @@ var families = []family{
 		Members: []string{
 			"parallel.Map", "parallel.MapUnordered", "parallel.ForEach",
 			"parallel.MapTry", "parallel.MapUnorderedTry", "parallel.ForEachTry",
+			"parallel.Do", "parallel.Retry", "parallel.Limit",
 			"parallel.Buffer", "parallel.ChunkedWithin", "parallel.Merge",
 		},
 	},

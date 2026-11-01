@@ -224,48 +224,6 @@ fmt.Println("purged on", purged.Load(), "nodes, err:", err)
 purged on 6 nodes, err: <nil>
 ```
 
-### Different calls
-
-```go
-// Not the same call for many inputs, but three different calls a
-// dashboard needs, with nothing to do with each other. Put the
-// functions themselves in the sequence.
-getJSON := func(ctx context.Context, path string, into any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, shopURL+path, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	return json.NewDecoder(resp.Body).Decode(into)
-}
-
-var (
-	name     string
-	orders   []int
-	featured struct{ Name string }
-)
-loads := catena.Of(
-	func(ctx context.Context) error { return getJSON(ctx, "/users/7/name", &name) },
-	func(ctx context.Context) error { return getJSON(ctx, "/users/7/orders", &orders) },
-	func(ctx context.Context) error { return getJSON(ctx, "/products/103", &featured) },
-)
-
-// All three run together. The first to fail cancels the others, and
-// all three have returned by the time err is set — so reading what
-// they wrote is safe.
-err := loads.Then(parallel.ForEach(context.Background(), 3,
-	func(ctx context.Context, load func(context.Context) error) error { return load(ctx) }))
-fmt.Println(name, orders, featured.Name, err)
-```
-
-```
-ada [1001 1004] monitor <nil>
-```
-
 ## MapTry
 
 ```go
@@ -409,6 +367,145 @@ fmt.Println(err)
 
 ```
 bad node name "sin 1"
+```
+
+## Do
+
+```go
+func Do(ctx context.Context, fns ...func(context.Context) error) error
+```
+
+Do runs every function at once and returns the first error to occur, or nil once all have succeeded: ForEach for calls that are each different rather than one call per element — the three loads a page needs, say. Each function receives a context that is cancelled when another fails or ctx is done, and every one has returned before Do does, so whatever they wrote can be read safely after it. A done ctx is an error even if every function succeeded. With no functions it returns nil.
+
+:::caution
+Starts one goroutine per function, all joined before it returns
+:::
+
+```go
+// A dashboard needs three unrelated things at once. Each function
+// writes its own variable; Do returns once all three have returned, so
+// reading them afterwards is safe. The first failure cancels the
+// others.
+getJSON := func(ctx context.Context, path string, into any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, shopURL+path, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return json.NewDecoder(resp.Body).Decode(into)
+}
+
+var (
+	name     string
+	orders   []int
+	featured struct{ Name string }
+)
+err := parallel.Do(context.Background(),
+	func(ctx context.Context) error { return getJSON(ctx, "/users/7/name", &name) },
+	func(ctx context.Context) error { return getJSON(ctx, "/users/7/orders", &orders) },
+	func(ctx context.Context) error { return getJSON(ctx, "/products/103", &featured) },
+)
+fmt.Println(name, orders, featured.Name, err)
+```
+
+```
+ada [1001 1004] monitor <nil>
+```
+
+## Retry
+
+```go
+func Retry[T, U any](attempts int, backoff func(attempt int) time.Duration, retryable func(error) bool, f func(context.Context, T) (U, error)) func(context.Context, T) (U, error)
+```
+
+Retry returns f made to try again when it fails: up to attempts tries in all, waiting backoff(k) after failed try k (1, 2, …) before the next. It stops at the first success, after the last try, when retryable reports false for the error, or when ctx is done — a wait cut short by ctx returns the last try's error and makes no further try. A nil retryable retries every error, and a nil backoff never waits. A panic in f is not retried. Panics if attempts <= 0.
+
+:::caution
+What it returns has the shape of f, so it goes anywhere f does:  parallel.Map(ctx, 8, parallel.Retry(3, backoff, isTransient, fetch))  ⚠ Starts no goroutines: it waits on the goroutine that called it, for up to the sum of the backoffs
+:::
+
+```go
+// The stock service is having a bad day: every item's first two
+// requests get a 503. A 503 is worth trying again; a 404 would not
+// be, so the predicate says which errors to retry.
+errUnavailable := errors.New("503 Service Unavailable")
+inStock := func(ctx context.Context, sku string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, shopURL+"/flaky/"+sku, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return "", fmt.Errorf("%s: %w", sku, errUnavailable)
+	}
+	return sku + " in stock", nil
+}
+transient := func(err error) bool { return errors.Is(err, errUnavailable) }
+backoff := func(attempt int) time.Duration { return time.Duration(attempt) * time.Millisecond }
+
+// Up to three tries each, four items at a time.
+checked, err := catena.Of("kbd-01", "mse-07", "mon-27").
+	Then(parallel.Map(context.Background(), 4, parallel.Retry(3, backoff, transient, inStock))).
+	Collect()
+fmt.Println(checked, err)
+```
+
+```
+[kbd-01 in stock mse-07 in stock mon-27 in stock] <nil>
+```
+
+## Limit
+
+```go
+func Limit[T, U any](n int, per time.Duration, f func(context.Context, T) (U, error)) func(context.Context, T) (U, error)
+```
+
+Limit returns f made to keep to a rate: at most n calls are let through to f in any period of length per — 50 a second is Limit(50, time.Second, f). A call over the limit waits for its turn; if ctx is done first it returns (zero, ctx.Err()) without calling f, and the turn it was given is spent. Calls take their turns in the order they arrive. The rate is kept when calls are let through: a goroutine the scheduler is slow to resume can reach f later than its turn, as with any limiter on the calling side, so leave a server's limit some headroom. The limit is shared by every call of the function it returns, across stages and iterations: make one per quota and pass it wherever that quota applies. Panics if n <= 0 or per <= 0.
+
+:::caution
+- Wrapped around f inside Retry, every try counts against it:  parallel.Retry(3, backoff, isTransient, parallel.Limit(50, time.Second, fetch))  ⚠ Starts no goroutines: a call waits on the goroutine that made it
+- Holds the start times of the last n calls
+:::
+
+```go
+// The API allows five requests per 50ms. Eight workers would blow
+// through that at once, so the call is limited, and the limit holds
+// across all of them.
+getProduct := func(ctx context.Context, id int) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/products/%d", shopURL, id), nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	resp.Body.Close()
+	return id, nil
+}
+
+limited := parallel.Limit(5, 50*time.Millisecond, getProduct)
+ids := catena.Of(101, 102, 103, 104, 101, 102, 103, 104, 101, 102, 103, 104)
+start := time.Now()
+got, err := ids.Then(parallel.Map(context.Background(), 8, limited)).Collect()
+
+// Twelve requests at five per 50ms: five at once, five 50ms later,
+// the last two 50ms after that.
+fmt.Println(len(got), "products, err:", err)
+fmt.Println("took at least 100ms:", time.Since(start) >= 100*time.Millisecond)
+```
+
+```
+12 products, err: <nil>
+took at least 100ms: true
 ```
 
 ## Buffer

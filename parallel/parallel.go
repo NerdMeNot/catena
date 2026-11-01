@@ -28,10 +28,19 @@
 //   - Invalid construction arguments panic at construction time with a
 //     "parallel: " prefixed message. Nil sequences are empty.
 //
+// A pipeline that already carries errors goes through MapTry,
+// MapUnorderedTry and ForEachTry, which pass an errored element along
+// without calling anything for it — so a chain can go concurrent without
+// first deciding what its errors mean.
+//
+// Retry and Limit are not stages but wrappers for a callback: each returns
+// a function of the same shape, with retries or a rate limit, to hand to
+// any stage. Do runs a handful of different functions at once.
+//
 // There are two execution models, and each operator says which it is. The
-// caller-driven stages (Map, MapUnordered, ForEach) run the source on the
-// consumer's goroutine exactly as the core package does, and only the
-// callback concurrently. The producer stages (Buffer, ChunkedWithin,
+// caller-driven stages (Map, MapUnordered, ForEach and their Try forms)
+// run the source on the consumer's goroutine exactly as the core package
+// does, and only the callback concurrently. The producer stages (Buffer, ChunkedWithin,
 // Merge) run each source on a goroutine of its own, so everything upstream
 // of them runs concurrently with the consumer's loop body.
 package parallel

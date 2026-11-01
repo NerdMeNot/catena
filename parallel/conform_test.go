@@ -102,6 +102,9 @@ var stageOps = []stageOp{
 var dedicatedCovered = map[string]string{
 	"ForEach":    "TestForEach",
 	"ForEachTry": "TestForEachTry",
+	"Retry":      "TestRetry",
+	"Limit":      "TestLimit",
+	"Do":         "TestDo",
 }
 
 // ---- fixtures ----
